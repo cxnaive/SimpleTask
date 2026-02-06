@@ -137,6 +137,33 @@ public class DailyTaskGUI extends AbstractGUI {
         }
     }
 
+    /**
+     * 获取玩家今日已使用刷新次数
+     */
+    private int getTodayRerollCount(Player player) {
+        UUID uuid = player.getUniqueId();
+        LocalDate today = LocalDate.now();
+
+        // 尝试从数据库同步查询
+        try (Connection conn = plugin.getDatabaseManager().getConnection()) {
+            String sql = "SELECT reroll_count, last_reset_date FROM player_task_reset WHERE player_uuid = ?";
+            try (PreparedStatement ps = conn.prepareStatement(sql)) {
+                ps.setString(1, uuid.toString());
+                try (ResultSet rs = ps.executeQuery()) {
+                    if (rs.next()) {
+                        java.sql.Date resetDate = rs.getDate("last_reset_date");
+                        if (resetDate.toLocalDate().equals(today)) {
+                            return rs.getInt("reroll_count");
+                        }
+                    }
+                }
+            }
+        } catch (SQLException e) {
+            plugin.getLogger().warning("Failed to get reroll count: " + e.getMessage());
+        }
+        return 0;
+    }
+
     private static PlayerTask parsePlayerTaskFromResultSet(UUID playerUuid, ResultSet rs, SimpleTaskPlugin plugin) throws Exception {
         String taskKey = rs.getString("task_key");
         int progress = rs.getInt("current_progress");
@@ -217,11 +244,68 @@ public class DailyTaskGUI extends AbstractGUI {
         ItemStack closeButton = createDecoration(Material.BARRIER, "<red>关闭");
         setItem(49, closeButton, (p, e) -> p.closeInventory());
 
-        // Refresh button at slot 51 - 点击后重新异步加载
-        ItemStack refreshItem = createDecoration(Material.CLOCK, "<yellow>刷新");
+        // Refresh button at slot 51 - 刷新每日任务
+        int maxRerolls = plugin.getConfigManager().getDailyRerollMax();
+        double rerollCost = plugin.getConfigManager().getDailyRerollCost();
+
+        // 获取今日已使用刷新次数
+        int usedRerolls = getTodayRerollCount(player);
+        int remainingRerolls = maxRerolls - usedRerolls;
+
+        String rerollName;
+        List<String> rerollLore = new ArrayList<>();
+
+        if (maxRerolls <= 0) {
+            rerollName = "<gray>刷新任务 (已禁用)";
+        } else if (remainingRerolls <= 0) {
+            rerollName = "<gray>刷新任务 (次数已用完)";
+            rerollLore.add("<red>今日刷新次数已用完");
+            rerollLore.add("<gray>上限: " + maxRerolls + " 次/天");
+        } else {
+            rerollName = "<yellow>刷新任务 <green>(" + remainingRerolls + "/" + maxRerolls + ")";
+            rerollLore.add("<gray>今日剩余: " + remainingRerolls + " 次");
+            rerollLore.add("<gray>上限: " + maxRerolls + " 次/天");
+            if (rerollCost > 0) {
+                rerollLore.add("<gold>花费: " + rerollCost + " 金币");
+            } else {
+                rerollLore.add("<green>免费");
+            }
+            rerollLore.add("");
+            rerollLore.add("<yellow>点击刷新每日任务");
+        }
+
+        ItemStack refreshItem = createDecoration(Material.CLOCK, rerollName);
+        if (!rerollLore.isEmpty()) {
+            ItemMeta meta = refreshItem.getItemMeta();
+            if (meta != null) {
+                List<Component> loreComponents = new ArrayList<>();
+                for (String line : rerollLore) {
+                    loreComponents.add(MiniMessage.miniMessage().deserialize(line)
+                        .decoration(TextDecoration.ITALIC, false));
+                }
+                meta.lore(loreComponents);
+                refreshItem.setItemMeta(meta);
+            }
+        }
+
         setItem(51, refreshItem, (p, e) -> {
+            if (maxRerolls <= 0) {
+                p.sendMessage(MiniMessage.miniMessage().deserialize("<red>每日任务刷新功能已禁用"));
+                return;
+            }
+            if (remainingRerolls <= 0) {
+                p.sendMessage(MiniMessage.miniMessage().deserialize("<red>今日刷新次数已用完"));
+                return;
+            }
+
             p.closeInventory();
-            open(plugin, p);
+            plugin.getTaskManager().playerRerollDailyTasks(p, (success, message) -> {
+                p.sendMessage(MiniMessage.miniMessage().deserialize(message));
+                if (success) {
+                    // 刷新后重新打开GUI
+                    open(plugin, p);
+                }
+            });
         });
     }
 
@@ -422,50 +506,54 @@ public class DailyTaskGUI extends AbstractGUI {
             return;
         }
 
-        // 扣除物品
-        int actuallyRemoved = removeItemsFromInventory(player, requiredItems, canSubmit);
-        if (actuallyRemoved <= 0) {
-            player.sendMessage(net.kyori.adventure.text.minimessage.MiniMessage.miniMessage()
-                    .deserialize("<red>扣除物品失败"));
-            return;
-        }
+        // 先在玩家实体调度器中扣除物品，防止玩家卡bug转移物品
+        final int finalCanSubmit = canSubmit;
+        player.getScheduler().execute(plugin, () -> {
+            int actuallyRemoved = removeItemsFromInventory(player, requiredItems, finalCanSubmit);
 
-        // 更新任务进度
-        final int newProgress = Math.min(currentProgress + actuallyRemoved, targetAmount);
-        final boolean nowCompleted = newProgress >= targetAmount;
+            if (actuallyRemoved <= 0) {
+                player.sendMessage(net.kyori.adventure.text.minimessage.MiniMessage.miniMessage()
+                        .deserialize("<red>扣除物品失败"));
+                return;
+            }
 
-        plugin.getDatabaseQueue().submit("submitTask", (Connection conn) -> {
-            String updateSql = "UPDATE player_daily_tasks SET current_progress = ?, completed = ? WHERE player_uuid = ? AND task_key = ? AND task_date = ?";
-            try (PreparedStatement ps = conn.prepareStatement(updateSql)) {
-                ps.setInt(1, newProgress);
-                ps.setBoolean(2, nowCompleted);
-                ps.setString(3, player.getUniqueId().toString());
-                ps.setString(4, task.getTaskKey());
-                ps.setDate(5, java.sql.Date.valueOf(task.getTaskDate()));
-                ps.executeUpdate();
-            }
-            return null;
-        }, result -> {
-            // 更新本地缓存
-            task.setCurrentProgress(newProgress);
-            if (nowCompleted) {
-                task.setCompleted(true);
+            // 扣除成功后更新数据库
+            final int newProgress = Math.min(currentProgress + actuallyRemoved, targetAmount);
+            final boolean nowCompleted = newProgress >= targetAmount;
+
+            plugin.getDatabaseQueue().submit("submitTask", (Connection conn) -> {
+                String updateSql = "UPDATE player_daily_tasks SET current_progress = ?, completed = ? WHERE player_uuid = ? AND task_key = ? AND task_date = ?";
+                try (PreparedStatement ps = conn.prepareStatement(updateSql)) {
+                    ps.setInt(1, newProgress);
+                    ps.setBoolean(2, nowCompleted);
+                    ps.setString(3, player.getUniqueId().toString());
+                    ps.setString(4, task.getTaskKey());
+                    ps.setDate(5, java.sql.Date.valueOf(task.getTaskDate()));
+                    ps.executeUpdate();
+                }
+                return null;
+            }, result -> {
+                // 更新本地缓存
+                task.setCurrentProgress(newProgress);
+                if (nowCompleted) {
+                    task.setCompleted(true);
+                    player.sendMessage(net.kyori.adventure.text.minimessage.MiniMessage.miniMessage()
+                            .deserialize("<green>任务完成！点击领取奖励"));
+                } else {
+                    player.sendMessage(net.kyori.adventure.text.minimessage.MiniMessage.miniMessage()
+                            .deserialize("<yellow>已提交物品，进度: " + newProgress + "/" + targetAmount));
+                }
+                // 刷新GUI
+                initialize();
+            }, e -> {
+                plugin.getLogger().log(java.util.logging.Level.SEVERE, "Failed to update submit task progress", e);
                 player.sendMessage(net.kyori.adventure.text.minimessage.MiniMessage.miniMessage()
-                        .deserialize("<green>任务完成！点击领取奖励"));
-            } else {
-                Map<String, String> placeholders = new HashMap<>();
-                placeholders.put("progress", String.valueOf(newProgress));
-                placeholders.put("target", String.valueOf(targetAmount));
-                player.sendMessage(net.kyori.adventure.text.minimessage.MiniMessage.miniMessage()
-                        .deserialize("<yellow>已提交物品，进度: " + newProgress + "/" + targetAmount));
-            }
-            // 刷新GUI
-            initialize();
-        }, e -> {
-            plugin.getLogger().log(java.util.logging.Level.SEVERE, "Failed to update submit task progress", e);
-            player.sendMessage(net.kyori.adventure.text.minimessage.MiniMessage.miniMessage()
-                    .deserialize("<red>提交失败，请重试"));
-        });
+                        .deserialize("<red>提交失败，进度未保存"));
+            });
+        }, () -> {
+            // 玩家离线时的取消回调
+            plugin.getLogger().info("Player " + player.getName() + " went offline before submit task");
+        }, 0L);
     }
 
     /**

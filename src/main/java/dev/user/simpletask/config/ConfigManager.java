@@ -21,6 +21,8 @@ public class ConfigManager {
     // Daily task settings
     private int dailyTaskCount;
     private boolean autoClaim;
+    private int dailyRerollMax;
+    private double dailyRerollCost;
 
     // Template sync settings
     private int templateSyncInterval;
@@ -69,6 +71,8 @@ public class ConfigManager {
         // Daily tasks
         this.dailyTaskCount = config.getInt("daily-tasks.daily-count", 5);
         this.autoClaim = config.getBoolean("daily-tasks.auto-claim", false);
+        this.dailyRerollMax = config.getInt("daily-tasks.reroll.max-per-day", 3);
+        this.dailyRerollCost = config.getDouble("daily-tasks.reroll.cost", 100.0);
         this.templateSyncInterval = config.getInt("template.sync-interval", 0); // 0 = disabled
         this.dataRetentionDays = config.getInt("data.retention-days", 7); // 默认保留7天
 
@@ -231,6 +235,14 @@ public class ConfigManager {
 
     public boolean isAutoClaim() {
         return autoClaim;
+    }
+
+    public int getDailyRerollMax() {
+        return dailyRerollMax;
+    }
+
+    public double getDailyRerollCost() {
+        return dailyRerollCost;
     }
 
     public int getTemplateSyncInterval() {

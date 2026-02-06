@@ -624,6 +624,142 @@ public class TaskManager {
     }
 
     /**
+     * 玩家付费刷新每日任务
+     * @param player 玩家
+     * @param callback 回调函数，返回刷新结果和消息
+     */
+    public void playerRerollDailyTasks(Player player, java.util.function.BiConsumer<Boolean, String> callback) {
+        UUID uuid = player.getUniqueId();
+        LocalDate today = TimeUtil.getToday();
+
+        int maxRerolls = plugin.getConfigManager().getDailyRerollMax();
+        double cost = plugin.getConfigManager().getDailyRerollCost();
+
+        // 检查是否允许刷新
+        if (maxRerolls <= 0) {
+            callback.accept(false, "<red>每日任务刷新功能已禁用");
+            return;
+        }
+
+        // 检查是否有可用模板
+        if (templateSyncManager.getAllTemplates().isEmpty()) {
+            callback.accept(false, "<red>系统错误：没有可用的任务模板，请联系管理员");
+            return;
+        }
+
+        databaseQueue.submit("playerRerollCheck", (conn) -> {
+            // 获取今日刷新次数
+            String selectSql = "SELECT reroll_count, last_reset_date FROM player_task_reset WHERE player_uuid = ?";
+            int currentRerolls = 0;
+
+            try (PreparedStatement ps = conn.prepareStatement(selectSql)) {
+                ps.setString(1, uuid.toString());
+                try (ResultSet rs = ps.executeQuery()) {
+                    if (rs.next()) {
+                        LocalDate lastReset = rs.getDate("last_reset_date").toLocalDate();
+                        if (lastReset.equals(today)) {
+                            currentRerolls = rs.getInt("reroll_count");
+                        }
+                    }
+                }
+            }
+
+            // 检查次数限制
+            if (currentRerolls >= maxRerolls) {
+                return new RerollResult(false, "<red>今日刷新次数已用完（上限：" + maxRerolls + "次）", currentRerolls);
+            }
+
+            // 检查金币（如果配置了花费）
+            if (cost > 0 && plugin.getEconomyManager().isEnabled()) {
+                double balance = plugin.getEconomyManager().getBalance(player);
+                if (balance < cost) {
+                    return new RerollResult(false, "<red>金币不足，需要 " + cost + " 金币", currentRerolls);
+                }
+            }
+
+            return new RerollResult(true, null, currentRerolls);
+        }, result -> {
+            if (!result.success) {
+                callback.accept(false, result.message);
+                return;
+            }
+
+            // 扣除金币
+            if (cost > 0 && plugin.getEconomyManager().isEnabled()) {
+                boolean deducted = plugin.getEconomyManager().withdraw(player, cost);
+                if (!deducted) {
+                    callback.accept(false, "<red>扣除金币失败");
+                    return;
+                }
+            }
+
+            // 执行刷新
+            doPlayerReroll(player, today, result.currentRerolls + 1, callback);
+        }, e -> {
+            plugin.getLogger().log(Level.SEVERE, "Failed to check reroll for player: " + player.getName(), e);
+            callback.accept(false, "<red>刷新检查失败，请重试");
+        });
+    }
+
+    private record RerollResult(boolean success, String message, int currentRerolls) {}
+
+    private void doPlayerReroll(Player player, LocalDate today, int newRerollCount,
+                                java.util.function.BiConsumer<Boolean, String> callback) {
+        UUID uuid = player.getUniqueId();
+        int taskCount = plugin.getConfigManager().getDailyTaskCount();
+
+        databaseQueue.submit("doPlayerReroll", (conn) -> {
+            // 先删除今日旧任务
+            String deleteSql = "DELETE FROM player_daily_tasks WHERE player_uuid = ? AND task_date = ?";
+            try (PreparedStatement ps = conn.prepareStatement(deleteSql)) {
+                ps.setString(1, uuid.toString());
+                ps.setDate(2, java.sql.Date.valueOf(today));
+                ps.executeUpdate();
+            }
+
+            // 生成新任务
+            doGenerateTasks(conn, player, uuid, today, taskCount, false);
+
+            // 更新刷新次数
+            String updateRerollSql;
+            if (isH2Database()) {
+                updateRerollSql = "MERGE INTO player_task_reset (player_uuid, last_reset_date, reroll_count) KEY(player_uuid) VALUES (?, ?, ?)";
+            } else {
+                updateRerollSql = "INSERT INTO player_task_reset (player_uuid, last_reset_date, reroll_count) VALUES (?, ?, ?) " +
+                        "ON DUPLICATE KEY UPDATE reroll_count = ?";
+            }
+
+            try (PreparedStatement ps = conn.prepareStatement(updateRerollSql)) {
+                ps.setString(1, uuid.toString());
+                ps.setDate(2, java.sql.Date.valueOf(today));
+                ps.setInt(3, newRerollCount);
+                if (!isH2Database()) {
+                    ps.setInt(4, newRerollCount);
+                }
+                ps.executeUpdate();
+            }
+
+            return true;
+        }, success -> {
+            if (success) {
+                // 清除本地缓存，下次加载时会重新查询数据库
+                playerTasks.remove(uuid);
+                callback.accept(true, "<green>每日任务已刷新！今日已使用 " + newRerollCount + "/" +
+                        plugin.getConfigManager().getDailyRerollMax() + " 次刷新");
+            } else {
+                callback.accept(false, "<red>刷新失败");
+            }
+        }, e -> {
+            plugin.getLogger().log(Level.SEVERE, "Failed to reroll tasks for player: " + player.getName(), e);
+            callback.accept(false, "<red>刷新失败，请重试");
+        });
+    }
+
+    private boolean isH2Database() {
+        return "h2".equalsIgnoreCase(plugin.getConfigManager().getDatabaseType());
+    }
+
+    /**
      * 给指定玩家添加单个任务
      * @param player 目标玩家
      * @param template 任务模板

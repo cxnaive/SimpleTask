@@ -51,28 +51,34 @@ public class Reward {
             plugin.getEconomyManager().deposit(player, money);
         }
 
-        // Grant items - 满了直接drop到脚下
-        // 注意：背包操作在主线程执行
-        List<ItemStack> itemsToDrop = new ArrayList<>();
+        // Grant items - 使用玩家实体调度器确保线程安全
+        // 预先生成所有ItemStack，避免在调度器内访问外部状态
+        List<ItemStack> itemStacks = new ArrayList<>();
         for (RewardItem rewardItem : items) {
             ItemStack stack = ItemUtil.createItem(plugin, rewardItem.getItemKey(), rewardItem.getAmount());
             if (stack != null) {
-                var leftover = player.getInventory().addItem(stack);
-                if (!leftover.isEmpty()) {
-                    itemsToDrop.addAll(leftover.values());
-                }
+                itemStacks.add(stack);
             }
         }
 
-        // drop物品必须在玩家所在区域的调度器中执行
-        if (!itemsToDrop.isEmpty()) {
-            // 获取玩家位置用于调度
-            org.bukkit.Location location = player.getLocation();
-            plugin.getServer().getRegionScheduler().execute(plugin, location, () -> {
+        if (!itemStacks.isEmpty()) {
+            player.getScheduler().execute(plugin, () -> {
+                List<ItemStack> itemsToDrop = new ArrayList<>();
+                for (ItemStack stack : itemStacks) {
+                    var leftover = player.getInventory().addItem(stack);
+                    if (!leftover.isEmpty()) {
+                        itemsToDrop.addAll(leftover.values());
+                    }
+                }
+
+                // 满的物品drop到脚下（仍在实体调度器中执行）
                 for (ItemStack dropStack : itemsToDrop) {
                     player.getWorld().dropItem(player.getLocation(), dropStack);
                 }
-            });
+            }, () -> {
+                // 玩家离线时的取消回调 - 物品将不会被给予
+                plugin.getLogger().warning("Player " + player.getName() + " went offline before reward items could be granted");
+            }, 0L); // 立即执行，无延迟
         }
 
         // Execute commands - 使用GlobalRegionScheduler
@@ -84,28 +90,6 @@ public class Reward {
                 }
             });
         }
-    }
-
-    private int calculateRequiredSlots(SimpleTaskPlugin plugin) {
-        int slots = 0;
-        for (RewardItem rewardItem : items) {
-            ItemStack stack = ItemUtil.createItem(plugin, rewardItem.getItemKey(), 1);
-            if (stack != null) {
-                int maxStackSize = stack.getMaxStackSize();
-                slots += (int) Math.ceil((double) rewardItem.getAmount() / maxStackSize);
-            }
-        }
-        return slots;
-    }
-
-    private int getEmptySlots(Player player) {
-        int empty = 0;
-        for (int i = 0; i < 36; i++) {
-            if (player.getInventory().getItem(i) == null) {
-                empty++;
-            }
-        }
-        return empty;
     }
 
     public String getDisplayString(SimpleTaskPlugin plugin) {

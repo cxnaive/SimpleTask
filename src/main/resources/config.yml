@@ -21,6 +21,12 @@ daily-tasks:
   daily-count: 5
   # 是否自动领取奖励 (true=自动发放, false=手动点击领取)
   auto-claim: false
+  # 每日任务刷新设置
+  reroll:
+    # 每日刷新次数上限 (0=禁止刷新)
+    max-per-day: 3
+    # 每次刷新花费的金币 (0=免费)
+    cost: 100
 
 # 防刷任务设置
 anti-cheat:

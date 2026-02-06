@@ -187,7 +187,8 @@ public class DatabaseManager {
             String resetTable = "CREATE TABLE IF NOT EXISTS player_task_reset (" +
                     "    player_uuid VARCHAR(36) PRIMARY KEY," +
                     "    last_reset_date DATE NOT NULL," +
-                    "    reset_server VARCHAR(64)" +
+                    "    reset_server VARCHAR(64)," +
+                    "    reroll_count INT DEFAULT 0" +
                     ")";
             stmt.execute(resetTable);
 
