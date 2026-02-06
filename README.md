@@ -192,10 +192,21 @@ database:
 mine_diamonds:
   name: "钻石矿工"
   type: BREAK
-  version: 2  # 版本号，修改后会触发同步
+  version: 2  # 版本号，修改后重新导入会触发同步
 ```
 
-修改版本号后，使用 `/taskadmin reloadfromdb` 或等待自动同步即可更新玩家任务。
+### 工作流程
+
+1. **首次导入**: 在 `tasks.yml` 中定义任务后，使用 `/taskadmin import all` 导入到数据库
+2. **修改模板**: 修改 `tasks.yml` 中的任务配置，并增加 `version` 号
+3. **重新导入**: 再次使用 `/taskadmin import <任务key>` 或 `import all` 将更新同步到数据库
+4. **自动同步**: 如果配置了 `template.sync-interval`，系统会自动检测版本变更并同步
+
+### 注意事项
+
+- 版本号只在导入时读取，用于判断数据库中的模板是否需要更新
+- 玩家已接取的任务不会自动变更，只有新抽取的任务会使用最新模板
+- 使用 `/taskadmin reloadfromdb` 可以从数据库重新加载模板到内存（用于多服同步场景）
 
 ## 开源协议
 
