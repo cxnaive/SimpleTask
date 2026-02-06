@@ -200,7 +200,7 @@ mine_diamonds:
 1. **首次导入**: 在 `tasks.yml` 中定义任务后，使用 `/taskadmin import all` 导入到数据库
 2. **修改模板**: 修改 `tasks.yml` 中的任务配置，并增加 `version` 号
 3. **重新导入**: 再次使用 `/taskadmin import <任务key>` 或 `import all` 将更新同步到数据库
-4. **自动同步**: 如果配置了 `template.sync-interval`，系统会自动检测版本变更并同步
+4. **自动同步**: 如果配置了 `template.sync-interval`，系统会自动检测**其他服务器**导入的模板变更并同步到本服（用于多服共享数据库场景）
 
 ### 注意事项
 
