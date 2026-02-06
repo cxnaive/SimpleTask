@@ -1,74 +1,75 @@
 # SimpleTask
 
-A daily task system plugin for Minecraft Folia/Paper servers.
+一款适用于 Minecraft Folia/Paper 服务器的玩家每日任务系统插件。
 
-## Features
+## 功能特性
 
-- **9 Task Types**: CHAT, CRAFT, FISH, CONSUME, BREAK, HARVEST, SUBMIT, KILL, BREED
-- **Daily Task Assignment**: Randomly assigns tasks to players based on weights
-- **Progress Tracking**: Real-time progress with async database operations
-- **Reward System**: Money (XConomy), items, and commands
-- **Anti-Cheat**: Prevents place-break farming for BREAK tasks
-- **CraftEngine Support**: Full compatibility with custom items/blocks
-- **GUI Interface**: User-friendly inventory GUI for task management
-- **Multi-Server Support**: MySQL backend for cross-server synchronization
+- **9种任务类型**: 发言(CHAT)、合成(CRAFT)、钓鱼(FISH)、消耗(CONSUME)、挖掘(BREAK)、收获(HARVEST)、提交(SUBMIT)、击杀(KILL)、繁殖(BREED)
+- **每日任务分配**: 基于权重随机抽取任务分配给玩家
+- **进度追踪**: 实时进度显示，异步数据库操作
+- **奖励系统**: 金币(XConomy)、物品、命令奖励
+- **防刷检测**: 防止玩家通过放置-破坏方块刷挖掘任务进度
+- **CraftEngine 支持**: 完整兼容自定义物品和方块
+- **GUI 界面**: 用户友好的背包界面管理任务
+- **多服同步**: MySQL 后端支持跨服务器数据同步
 
-## Requirements
+## 环境要求
 
 - Java 21+
-- Folia or Paper 1.21+
-- (Optional) XConomy for economy rewards
-- (Optional) CraftEngine for custom item support
+- Folia 或 Paper 1.21+
+- (可选) XConomy - 用于经济奖励
+- (可选) CraftEngine - 用于自定义物品支持
 
-## Installation
+## 安装方法
 
-1. Download the latest release from the releases page
-2. Place the JAR file in your server's `plugins/` folder
-3. Start the server to generate default configurations
-4. Edit `plugins/SimpleTask/config.yml` and `plugins/SimpleTask/tasks.yml` as needed
-5. Restart the server or use `/taskadmin reload`
+1. 从发布页面下载最新版本
+2. 将 JAR 文件放入服务器的 `plugins/` 文件夹
+3. 启动服务器生成默认配置文件
+4. 编辑 `plugins/SimpleTask/config.yml` 和 `plugins/SimpleTask/tasks.yml`
+5. 重启服务器或使用 `/taskadmin reload` 重载配置
 
-## Building from Source
+## 从源码构建
 
 ```bash
 ./gradlew shadowJar
 ```
 
-The built JAR will be in `build/libs/SimpleTask-1.0.0.jar`.
+构建后的 JAR 文件位于 `build/libs/SimpleTask-1.0.0.jar`。
 
-## Configuration
+## 配置文件
 
 ### config.yml
 
-Main configuration file for database, GUI, and message settings.
+主配置文件，包含数据库、GUI 和消息设置。
 
 ```yaml
-# Database (h2 for single server, mysql for multi-server)
+# 数据库设置 (h2 单机, mysql 多服)
 database:
-  type: h2  # or mysql
+  type: h2  # 或 mysql
 
-# Daily tasks
+# 每日任务设置
 daily-tasks:
-  daily-count: 5
-  auto-claim: false
+  daily-count: 5        # 每日任务数量
+  auto-claim: false     # 是否自动领取奖励
 
-# Anti-cheat for BREAK tasks
+# 挖掘任务防刷检测
 anti-cheat:
   enabled: true
-  time-window: 3600  # 60 minutes
+  time-window: 3600     # 缓存时间(秒)，默认60分钟
 ```
 
 ### tasks.yml
 
-Define task templates here. Example:
+在此定义任务模板。示例：
 
 ```yaml
+# 挖掘钻石任务
 mine_diamonds:
-  name: "Diamond Miner"
+  name: "钻石矿工"
   type: BREAK
   target-item: minecraft:diamond_ore
   target-amount: 10
-  description: "Mine 10 diamond ores"
+  description: "挖掘10个钻石矿"
   icon: minecraft:diamond_pickaxe
   weight: 10
   reward:
@@ -77,53 +78,125 @@ mine_diamonds:
       - item: minecraft:diamond
         amount: 5
 
+# 钓鱼任务
 fish_salmon:
-  name: "Salmon Fisher"
+  name: "鲑鱼渔夫"
   type: FISH
   target-item: minecraft:salmon
   target-amount: 5
-  description: "Catch 5 salmon"
+  description: "钓上5条鲑鱼"
   icon: minecraft:fishing_rod
   weight: 15
   reward:
     money: 50
+    commands:
+      - "give {player} minecraft:fish 10"
 ```
 
-## Commands
+## 命令列表
 
-### Player Commands
+### 玩家命令
 
-| Command | Description | Permission |
+| 命令 | 描述 | 权限 |
 |---------|-------------|------------|
-| `/task` | Open daily task GUI | simpletask.use |
+| `/task` | 打开每日任务界面 | simpletask.use |
 
-### Admin Commands
+### 管理员命令
 
-| Command | Description | Permission |
+| 命令 | 描述 | 权限 |
 |---------|-------------|------------|
-| `/taskadmin` | Open admin GUI | simpletask.admin |
-| `/taskadmin reloadconfig` | Reload configuration | simpletask.admin |
-| `/taskadmin reloadfromdb` | Reload templates from database | simpletask.admin |
-| `/taskadmin import [all\|key]` | Import task templates | simpletask.admin |
-| `/taskadmin list` | List all templates | simpletask.admin |
-| `/taskadmin delete <key>` | Disable a task template | simpletask.admin |
-| `/taskadmin reroll <player\|all>` | Reroll daily tasks | simpletask.admin |
-| `/taskadmin assign <player\|all> <task>` | Assign task to player | simpletask.admin |
+| `/taskadmin` | 打开管理界面 | simpletask.admin |
+| `/taskadmin reloadconfig` | 重载配置文件 | simpletask.admin |
+| `/taskadmin reloadfromdb` | 从数据库重载模板 | simpletask.admin |
+| `/taskadmin import [all\|key]` | 导入任务模板 | simpletask.admin |
+| `/taskadmin list` | 列出所有模板 | simpletask.admin |
+| `/taskadmin delete <key>` | 禁用任务模板 | simpletask.admin |
+| `/taskadmin reroll <player\|all>` | 重新抽取每日任务 | simpletask.admin |
+| `/taskadmin assign <player\|all> <task>` | 给玩家分配任务 | simpletask.admin |
 
-## Task Types
+## 任务类型详解
 
-| Type | Description | Target Item Example |
+| 类型 | 描述 | 目标物品示例 |
 |------|-------------|---------------------|
-| CHAT | Send chat messages | "hello" (keyword) |
-| CRAFT | Craft items | minecraft:diamond_pickaxe |
-| FISH | Catch fish/items | minecraft:cod |
-| CONSUME | Eat/drink items | minecraft:golden_apple |
-| BREAK | Break blocks | minecraft:stone |
-| HARVEST | Harvest crops | minecraft:wheat |
-| SUBMIT | Submit items | minecraft:diamond |
-| KILL | Kill entities | minecraft:zombie |
-| BREED | Breed animals | minecraft:cow |
+| CHAT | 发送聊天消息 | "你好" (关键词包含匹配) |
+| CRAFT | 合成物品 | minecraft:diamond_pickaxe |
+| FISH | 钓鱼 | minecraft:cod |
+| CONSUME | 吃/喝物品 | minecraft:golden_apple |
+| BREAK | 破坏方块 | minecraft:stone |
+| HARVEST | 收获作物 | minecraft:wheat |
+| SUBMIT | 提交物品 | minecraft:diamond |
+| KILL | 击杀生物 | minecraft:zombie |
+| BREED | 繁殖动物 | minecraft:cow |
 
-## License
+### 多物品匹配
 
-MIT License - See LICENSE file for details.
+`target-item` 支持单个物品或列表，满足任意一个即算进度：
+
+```yaml
+# 单个物品
+target-item: minecraft:oak_log
+
+# 多个物品（任一匹配）
+target-item:
+  - minecraft:oak_log
+  - minecraft:birch_log
+  - minecraft:spruce_log
+```
+
+### 不设置目标物品
+
+如果不设置 `target-item`，则所有同类事件都计入进度：
+
+```yaml
+# 任何聊天都计数
+type: CHAT
+target-amount: 10
+
+# 任何鱼都计数
+type: FISH
+target-amount: 5
+```
+
+## 数据库支持
+
+### H2 (默认)
+适合单机服务器，数据存储在本地文件。
+
+```yaml
+database:
+  type: h2
+  h2:
+    filename: simpletask
+```
+
+### MySQL
+适合多服务器共享数据。
+
+```yaml
+database:
+  type: mysql
+  mysql:
+    host: localhost
+    port: 3306
+    database: simpletask
+    username: root
+    password: password
+    pool-size: 10
+```
+
+## 模板版本控制
+
+每个任务模板都有 `version` 字段，用于检测模板变更：
+
+```yaml
+mine_diamonds:
+  name: "钻石矿工"
+  type: BREAK
+  version: 2  # 版本号，修改后会触发同步
+```
+
+修改版本号后，使用 `/taskadmin reloadfromdb` 或等待自动同步即可更新玩家任务。
+
+## 开源协议
+
+MIT 协议 - 详见 LICENSE 文件。
