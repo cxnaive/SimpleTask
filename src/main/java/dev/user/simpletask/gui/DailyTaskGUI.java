@@ -232,15 +232,15 @@ public class DailyTaskGUI extends AbstractGUI {
             }
         }
 
-        // Bottom row buttons (row 6: slots 45-53) - centered at bottom
-        // Progress summary in slot 46
+        // Bottom row buttons (row 6: slots 45-53) - 分散对称布局
+        // Progress summary in slot 47 (左侧)
         long completedCount = tasks.stream().filter(PlayerTask::isClaimed).count();
         long totalCount = tasks.size();
         String progressText = "<yellow>进度: <green>" + completedCount + "<gray>/<yellow>" + totalCount;
         ItemStack progressItem = createDecoration(Material.PAPER, progressText);
-        setItem(46, progressItem);
+        setItem(47, progressItem);
 
-        // Close button centered at slot 49
+        // Close button centered at slot 49 (正中)
         ItemStack closeButton = createDecoration(Material.BARRIER, "<red>关闭");
         setItem(49, closeButton, (p, e) -> p.closeInventory());
 
