@@ -1,0 +1,147 @@
+# SimpleTask - 玩家每日任务系统配置
+# 注意: 任务模板已移至 tasks.yml
+
+# 数据库设置
+database:
+  # 数据库类型: h2 (本地文件) 或 mysql (跨服同步)
+  type: h2
+  mysql:
+    host: localhost
+    port: 3306
+    database: simpletask
+    username: root
+    password: password
+    pool-size: 10
+  h2:
+    filename: simpletask
+
+# 每日任务设置
+daily-tasks:
+  # 每日抽取任务数量
+  daily-count: 5
+  # 是否自动领取奖励 (true=自动发放, false=手动点击领取)
+  auto-claim: false
+
+# 防刷任务设置
+anti-cheat:
+  # 是否启用BREAK任务防刷检测
+  # 启用后，玩家自己放置的方块在短时间内被破坏不会计入任务进度
+  enabled: true
+  # 时间窗口（秒），玩家放置方块后在此时间内破坏不计入进度
+  # 建议值：3600秒（60分钟），可根据服务器情况调整
+  # 设置为0表示不限制（但放置后仍会计入缓存，只是立即过期）
+  time-window: 3600
+# 模板同步设置
+template:
+  # 模板同步间隔（秒），用于从数据库自动同步模板更新。
+  # 设置为0表示禁用自动同步（手动使用 /taskadmin import 导入模板）
+  # 设置为正数表示每隔多少秒检查一次数据库模板变化（用于多服同步模板）
+  sync-interval: 60
+
+# 数据保留设置
+data:
+  # 玩家每日任务数据保留天数，超过此天数的旧数据将被自动清理
+  # 设置为0表示永久保留（不推荐，会导致数据库无限增长）
+  # 设置为正数表示保留最近多少天的数据
+  retention-days: 7
+
+# GUI界面设置
+gui:
+  titles:
+    daily-tasks: "<dark_gray>每日任务"
+    admin: "<dark_gray>任务管理"
+  decoration:
+    border:
+      material: "minecraft:black_stained_glass_pane"
+      name: " "
+    completed:
+      material: "minecraft:lime_stained_glass_pane"
+      name: "<green>已完成"
+    in-progress:
+      material: "minecraft:yellow_stained_glass_pane"
+      name: "<yellow>进行中"
+    not-started:
+      material: "minecraft:red_stained_glass_pane"
+      name: "<red>未开始"
+  # 任务物品显示
+  task-item:
+    progress: "<gray>进度: <yellow>{current}/{target}"
+    reward-money: "<gold>金币奖励: <yellow>{money}"
+    reward-items: "<gold>物品奖励: <yellow>{count} 种"
+    status-completed: "<green>✓ 已领取奖励"
+    status-claimable: "<yellow>点击领取奖励!"
+    click-to-claim: "<yellow>点击领取奖励"
+
+# 命令帮助信息 (本地化)
+commands:
+  help-title: "<gold>===== 每日任务系统帮助 ====="
+  help-player:
+    - "<yellow>/task <gray>- 打开每日任务界面"
+  help-admin:
+    - "<yellow>/taskadmin <gray>- 打开管理界面"
+    - "<yellow>/taskadmin reload <gray>- 重载配置"
+    - "<yellow>/taskadmin import [all|任务key] <gray>- 导入任务模板"
+    - "<yellow>/taskadmin list <gray>- 查看任务列表"
+    - "<yellow>/taskadmin delete <任务key> <gray>- 禁用任务模板"
+    - "<yellow>/taskadmin reroll <玩家名/all> <gray>- 重新抽取每日任务"
+    - "<yellow>/taskadmin help <gray>- 显示此帮助"
+  unknown-command: "<red>未知命令，使用 <yellow>/taskadmin help <red>查看帮助"
+  player-only: "<red>此命令只能由玩家执行"
+
+# 管理命令消息
+admin:
+  config-reloaded: "<green>配置已重载!"
+  import-success-all: "<green>成功导入 <yellow>{count} <green>个任务模板"
+  import-success-single: "<green>成功导入任务: <yellow>{task_key}"
+  import-fail: "<red>导入失败: 未找到任务模板"
+  import-fail-not-found: "<red>未找到任务模板: <yellow>{task_key}"
+  list-title-config: "<gold>===== 配置文件任务 (tasks.yml) ====="
+  list-title-database: "<gold>===== 数据库任务 ====="
+  list-status-imported: "<green>[已导入]"
+  list-status-not-imported: "<gray>[未导入]"
+  list-template-info: "<yellow>{key} <gray>| <white>{type} <gray>| 权重: <white>{weight}"
+  delete-success: "<green>任务 <yellow>{task_key} <green>已删除"
+  delete-fail-not-found: "<red>未找到任务模板: <yellow>{task_key}"
+  no-permission: "<red>你没有权限执行此操作"
+  # 重新抽取任务
+  reroll-success-player: "<green>已为玩家 <yellow>{player} <green>重新抽取每日任务"
+  reroll-success-all: "<green>已为所有在线玩家重新抽取每日任务 (<yellow>{count}<green>人)"
+  reroll-fail-player-not-found: "<red>找不到玩家: <yellow>{player}"
+  reroll-fail-no-templates: "<red>没有可用的任务模板，无法抽取任务"
+
+# 任务类型名称 (用于显示)
+task-types:
+  CHAT: "发言"
+  CRAFT: "合成"
+  FISH: "钓鱼"
+  CONSUME: "消耗"
+  BREAK: "挖掘"
+  HARVEST: "收获"
+  SUBMIT: "提交"
+  KILL: "击杀"
+  BREED: "繁殖"
+
+# 通用状态
+status:
+  completed: "已完成"
+  in-progress: "进行中"
+  not-started: "未开始"
+  claimable: "可领取"
+
+# 经济相关
+economy:
+  currency-name: "金币"
+  currency-format: "{amount} {currency}"
+
+# 消息设置 (支持MiniMessage格式)
+messages:
+  prefix: "<gold>[每日任务] <reset>"
+  no-permission: "<red>你没有权限执行此操作。"
+  task-completed: "<green>恭喜！你完成了任务: <yellow>{task_name}"
+  task-progress-milestone: "<gray>任务 <yellow>{task_name} <gray>进度: <yellow>{progress}/{target} <gray>({percent}%)"
+  all-tasks-completed: "<green>恭喜！你已完成今日所有任务！"
+  reward-claimed: "<green>已领取奖励: <yellow>{reward}"
+  insufficient-space: "<red>背包空间不足，无法领取奖励！"
+  task-reset: "<yellow>每日任务已重置，请查收今日任务！"
+  progress-update: "<gray>任务进度: <yellow>{current}/{target} <gray>({task_name})"
+  task-assigned: "<yellow>管理员给你添加了新任务: <gold>{task_name}"

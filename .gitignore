@@ -1,0 +1,40 @@
+# Gradle
+.gradle/
+build/
+!gradle/wrapper/gradle-wrapper.jar
+!gradle/wrapper/gradle-wrapper.properties
+gradlew.bat
+
+# IDE
+.idea/
+*.iml
+*.ipr
+*.iws
+.vscode/
+*.swp
+*.swo
+*~
+.project
+.classpath
+.settings/
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Runtime data (do not commit)
+*.db
+*.mv.db
+*.trace.db
+simpletask*.db
+*.log
+logs/
+
+# Local config (may contain sensitive data)
+# Comment out if you want to share example configs
+# /src/main/resources/config.yml
+# /src/main/resources/tasks.yml
+
+# Claude
+.claude/
