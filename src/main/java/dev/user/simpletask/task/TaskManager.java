@@ -354,6 +354,18 @@ public class TaskManager {
     }
 
     public void updateProgress(Player player, TaskType type, String targetItem, int amount) {
+        updateProgress(player, type, targetItem, null, amount);
+    }
+
+    /**
+     * 更新任务进度（支持NBT匹配）
+     * @param player 玩家
+     * @param type 任务类型
+     * @param targetItem 目标物品key
+     * @param itemStack 实际物品（用于NBT匹配，可为null）
+     * @param amount 增加的数量
+     */
+    public void updateProgress(Player player, TaskType type, String targetItem, org.bukkit.inventory.ItemStack itemStack, int amount) {
         UUID uuid = player.getUniqueId();
         CopyOnWriteArrayList<PlayerTask> tasks = playerTasks.get(uuid);
 
@@ -378,9 +390,25 @@ public class TaskManager {
             }
 
             if (type.requiresTarget() && targetItem != null) {
-                if (!template.matchesTarget(targetItem)) {
-                    plugin.getLogger().fine("[TaskManager] Target mismatch: expected=" + template.getTargetItems() + ", actual=" + targetItem);
-                    continue;
+                // 如果有NBT条件且提供了ItemStack，使用NBT匹配
+                if (template.hasNbtMatchConditions() && itemStack != null) {
+                    boolean matchesNbt = false;
+                    for (String targetKey : template.getTargetItems()) {
+                        if (ItemUtil.matchesTarget(itemStack, targetKey, template.getNbtMatchConditions())) {
+                            matchesNbt = true;
+                            break;
+                        }
+                    }
+                    if (!matchesNbt) {
+                        plugin.getLogger().fine("[TaskManager] NBT mismatch for task: " + task.getTaskKey());
+                        continue;
+                    }
+                } else {
+                    // 无NBT条件，使用key匹配
+                    if (!template.matchesTarget(targetItem)) {
+                        plugin.getLogger().fine("[TaskManager] Target mismatch: expected=" + template.getTargetItems() + ", actual=" + targetItem);
+                        continue;
+                    }
                 }
             }
 

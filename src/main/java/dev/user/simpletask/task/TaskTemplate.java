@@ -39,6 +39,12 @@ public class TaskTemplate {
     // Extension data for future use (task chains, requirements, etc.)
     private final Map<String, Object> extensions = new HashMap<>();
 
+    // NBT matching conditions (optional)
+    private List<String> nbtMatchConditions = new ArrayList<>();
+
+    // Block state conditions for BREAK/HARVEST tasks (optional)
+    private List<String> blockStateConditions = new ArrayList<>();
+
     public TaskTemplate(String taskKey, String name, TaskType type, String targetItem, int targetAmount,
                         String description, String icon, int weight, Reward reward) {
         this(taskKey, name, type, targetItem != null ? Arrays.asList(targetItem) : new ArrayList<>(),
@@ -295,6 +301,50 @@ public class TaskTemplate {
         return extensions.get(key);
     }
 
+    // ========== NBT and Block State Conditions ==========
+
+    /**
+     * 获取NBT匹配条件列表
+     */
+    public List<String> getNbtMatchConditions() {
+        return new ArrayList<>(nbtMatchConditions);
+    }
+
+    /**
+     * 设置NBT匹配条件列表
+     */
+    public void setNbtMatchConditions(List<String> nbtMatchConditions) {
+        this.nbtMatchConditions = nbtMatchConditions != null ? new ArrayList<>(nbtMatchConditions) : new ArrayList<>();
+    }
+
+    /**
+     * 获取方块状态匹配条件列表
+     */
+    public List<String> getBlockStateConditions() {
+        return new ArrayList<>(blockStateConditions);
+    }
+
+    /**
+     * 设置方块状态匹配条件列表
+     */
+    public void setBlockStateConditions(List<String> blockStateConditions) {
+        this.blockStateConditions = blockStateConditions != null ? new ArrayList<>(blockStateConditions) : new ArrayList<>();
+    }
+
+    /**
+     * 检查是否有NBT匹配条件
+     */
+    public boolean hasNbtMatchConditions() {
+        return nbtMatchConditions != null && !nbtMatchConditions.isEmpty();
+    }
+
+    /**
+     * 检查是否有方块状态匹配条件
+     */
+    public boolean hasBlockStateConditions() {
+        return blockStateConditions != null && !blockStateConditions.isEmpty();
+    }
+
     // ========== JSON Serialization ==========
 
     /**
@@ -314,6 +364,12 @@ public class TaskTemplate {
         json.add("reward", GSON.toJsonTree(reward));
         if (!extensions.isEmpty()) {
             json.add("extensions", GSON.toJsonTree(extensions));
+        }
+        if (!nbtMatchConditions.isEmpty()) {
+            json.add("nbtMatchConditions", GSON.toJsonTree(nbtMatchConditions));
+        }
+        if (!blockStateConditions.isEmpty()) {
+            json.add("blockStateConditions", GSON.toJsonTree(blockStateConditions));
         }
         return GSON.toJson(json);
     }
@@ -359,6 +415,18 @@ public class TaskTemplate {
             @SuppressWarnings("unchecked")
             Map<String, Object> ext = GSON.fromJson(json.get("extensions"), Map.class);
             template.extensions.putAll(ext);
+        }
+
+        // Load NBT match conditions if present
+        if (json.has("nbtMatchConditions") && !json.get("nbtMatchConditions").isJsonNull()) {
+            List<String> nbtConditions = GSON.fromJson(json.get("nbtMatchConditions"), new TypeToken<List<String>>() {}.getType());
+            template.setNbtMatchConditions(nbtConditions);
+        }
+
+        // Load block state conditions if present
+        if (json.has("blockStateConditions") && !json.get("blockStateConditions").isJsonNull()) {
+            List<String> blockStateConditions = GSON.fromJson(json.get("blockStateConditions"), new TypeToken<List<String>>() {}.getType());
+            template.setBlockStateConditions(blockStateConditions);
         }
 
         return template;

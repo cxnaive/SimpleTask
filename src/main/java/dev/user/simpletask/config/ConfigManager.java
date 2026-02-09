@@ -421,6 +421,28 @@ public class ConfigManager {
         int version = section.getInt("version", 1);
         template.setVersion(version);
 
+        // 解析NBT匹配条件（可选）
+        List<String> nbtMatchConditions = section.getStringList("nbt-match");
+
+        // 为不支持NBT匹配的任务类型添加警告
+        if (!nbtMatchConditions.isEmpty()) {
+            switch (type) {
+                case KILL, BREAK, HARVEST, BREED -> {
+                    plugin.getLogger().warning("[Config] 任务 '" + key + "' (类型: " + type + ") 配置了NBT匹配条件，" +
+                        "但当前版本不支持该类型任务的NBT匹配。配置将被保存但不生效。");
+                }
+                case CHAT -> {
+                    plugin.getLogger().warning("[Config] 任务 '" + key + "' (类型: CHAT) 配置了NBT匹配条件，" +
+                        "CHAT任务类型不支持NBT匹配（聊天消息无NBT数据）。配置将被忽略。");
+                }
+            }
+        }
+        template.setNbtMatchConditions(nbtMatchConditions);
+
+        // 解析方块状态匹配条件（可选，用于BREAK/HARVEST任务）
+        List<String> blockStateConditions = section.getStringList("block-state");
+        template.setBlockStateConditions(blockStateConditions);
+
         return template;
     }
 

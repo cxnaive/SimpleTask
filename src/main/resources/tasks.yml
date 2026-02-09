@@ -769,3 +769,102 @@ breed_any_animal_30:
       - item: "minecraft:golden_carrot"
         amount: 8
   weight: 20
+
+# ============================================
+# NBT匹配示例任务
+# ============================================
+# 以下任务展示了如何使用 nbt-match 配置进行高级物品匹配
+# 格式: "path+value" 或 "path>=value" 等
+
+# 示例1: SUBMIT任务 - 提交带有自定义名称的钻石
+submit_named_diamond:
+  type: SUBMIT
+  name: "提交稀有钻石"
+  version: 1
+  target-item: "minecraft:diamond"
+  target-amount: 5
+  description: "<gray>提交 <yellow>5 <gray>个名为 <gold>§6稀有钻石 <gray>的钻石"
+  # NBT匹配条件: 自定义名称必须完全匹配
+  nbt-match:
+    - "minecraft:custom_name+\"§6稀有钻石\""
+  reward:
+    money: 500.0
+    items:
+      - item: "minecraft:diamond_block"
+        amount: 1
+  weight: 15
+
+# 示例2: CRAFT任务 - 合成带有特定附魔的武器
+# 注意: 需要配方结果本身就带有这些NBT，或者使用插件修改配方
+# 这个示例展示了如何配置，实际效果取决于服务器配方设置
+craft_enchanted_sword:
+  type: CRAFT
+  name: "合成附魔剑"
+  version: 1
+  target-item: "minecraft:diamond_sword"
+  target-amount: 1
+  description: "<gray>合成一把带有 <yellow>锋利3 <gray>以上的钻石剑"
+  # NBT匹配条件: 锋利附魔等级 >= 3
+  nbt-match:
+    - "minecraft:enchantments.minecraft:sharpness>=3"
+  reward:
+    money: 800.0
+    items:
+      - item: "minecraft:experience_bottle"
+        amount: 16
+  weight: 10
+
+# 示例3: FISH任务 - 钓到带有特定标签的宝藏
+fish_treasure:
+  type: FISH
+  name: "钓到宝藏"
+  version: 1
+  target-item: "minecraft:enchanted_book"
+  target-amount: 3
+  description: "<gray>钓到 <yellow>3 <gray>本带有 <gold>经验修补 <gray>的附魔书"
+  # NBT匹配条件: 必须包含经验修补附魔
+  nbt-match:
+    - "minecraft:enchantments.minecraft:mending>=1"
+  reward:
+    money: 600.0
+    items:
+      - item: "minecraft:fishing_rod"
+        amount: 1
+  weight: 12
+
+# 示例4: CONSUME任务 - 食用带有自定义数据的食物
+# 这通常需要配合自定义物品插件使用
+consume_custom_food:
+  type: CONSUME
+  name: "食用特制金苹果"
+  version: 1
+  target-item: "minecraft:golden_apple"
+  target-amount: 3
+  description: "<gray>食用 <yellow>3 <gray>个 <gold>特制金苹果"
+  # NBT匹配条件: 必须有 custom_data.quest_item=true
+  nbt-match:
+    - "minecraft:custom_data+{quest_item:true,food_type:'special_golden_apple'}"
+  reward:
+    money: 300.0
+    items:
+      - item: "minecraft:golden_carrot"
+        amount: 8
+  weight: 18
+
+# ============================================
+# NBT匹配配置说明
+# ============================================
+# 支持的操作符:
+#   +    : 精确匹配 (如: "minecraft:custom_name+\"§6传说之剑\"")
+#   >=   : 数值大于等于 (如: "minecraft:enchantments.levels.minecraft:sharpness>=5")
+#   <=   : 数值小于等于 (如: "minecraft:damage<=100")
+#   >    : 数值大于
+#   <    : 数值小于
+#   exists: 存在性检查 (如: "minecraft:custom_name+exists")
+#
+# 多个条件为 AND 关系，必须全部满足
+#
+# 注意:
+# - SUBMIT/CRAFT/FISH/CONSUME 任务支持 NBT 匹配
+# - KILL/BREAK/HARVEST/BREED 任务暂时不支持 NBT 匹配（配置会保存但不生效）
+# - CHAT 任务不支持 NBT 匹配（聊天消息无 NBT 数据）

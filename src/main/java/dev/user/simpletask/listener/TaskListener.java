@@ -83,11 +83,14 @@ public class TaskListener implements Listener {
             amount = Math.min(amount * 64, result.getMaxStackSize());
         }
 
+        // 注意：合成结果物品的NBT在CraftItemEvent时还未应用到玩家背包
+        // 这里使用配方结果物品的NBT（如果有）
         final int finalAmount = amount;
         final String finalItemKey = itemKey;
+        final ItemStack finalResult = result.clone();
 
         // updateProgress handles its own async database operations
-        taskManager.updateProgress(player, TaskType.CRAFT, finalItemKey, finalAmount);
+        taskManager.updateProgress(player, TaskType.CRAFT, finalItemKey, finalResult, finalAmount);
     }
 
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
@@ -103,11 +106,12 @@ public class TaskListener implements Listener {
             return;
         }
 
-        // 获取钓获物品的 key
-        String itemKey = ItemUtil.getItemKey(caughtItem.getItemStack());
+        // 获取钓获物品的 key 和 ItemStack
+        ItemStack caughtStack = caughtItem.getItemStack();
+        String itemKey = ItemUtil.getItemKey(caughtStack);
 
         // updateProgress handles its own async database operations
-        taskManager.updateProgress(player, TaskType.FISH, itemKey, 1);
+        taskManager.updateProgress(player, TaskType.FISH, itemKey, caughtStack, 1);
     }
 
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
@@ -125,9 +129,10 @@ public class TaskListener implements Listener {
         }
 
         final String finalItemKey = itemKey;
+        final ItemStack finalItem = item.clone();
 
         // updateProgress handles its own async database operations
-        taskManager.updateProgress(player, TaskType.CONSUME, finalItemKey, 1);
+        taskManager.updateProgress(player, TaskType.CONSUME, finalItemKey, finalItem, 1);
     }
 
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)

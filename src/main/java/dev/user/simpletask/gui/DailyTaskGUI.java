@@ -492,7 +492,8 @@ public class DailyTaskGUI extends AbstractGUI {
         }
 
         // 检查背包中是否有足够物品
-        Map<String, Integer> inventoryCounts = countItemsInInventory(player);
+        List<String> nbtConditions = task.getTemplate().getNbtMatchConditions();
+        Map<String, Integer> inventoryCounts = countItemsInInventory(player, requiredItems, nbtConditions);
         int targetAmount = task.getTemplate().getTargetAmount();
         int currentProgress = task.getCurrentProgress();
         int remainingNeeded = targetAmount - currentProgress;
@@ -508,8 +509,9 @@ public class DailyTaskGUI extends AbstractGUI {
 
         // 先在玩家实体调度器中扣除物品，防止玩家卡bug转移物品
         final int finalCanSubmit = canSubmit;
+        final List<String> finalNbtConditions = nbtConditions;
         player.getScheduler().execute(plugin, () -> {
-            int actuallyRemoved = removeItemsFromInventory(player, requiredItems, finalCanSubmit);
+            int actuallyRemoved = removeItemsFromInventory(player, requiredItems, finalCanSubmit, finalNbtConditions);
 
             if (actuallyRemoved <= 0) {
                 player.sendMessage(net.kyori.adventure.text.minimessage.MiniMessage.miniMessage()
@@ -557,16 +559,40 @@ public class DailyTaskGUI extends AbstractGUI {
     }
 
     /**
-     * 统计背包中物品数量（支持CE物品）
+     * 统计背包中物品数量（支持CE物品和NBT匹配）
      */
-    private Map<String, Integer> countItemsInInventory(Player player) {
+    private Map<String, Integer> countItemsInInventory(Player player, List<String> requiredItems, List<String> nbtConditions) {
         Map<String, Integer> counts = new HashMap<>();
         for (ItemStack item : player.getInventory().getContents()) {
             if (item == null || item.getType().isAir()) continue;
             String itemKey = ItemUtil.getItemKey(item);
+
+            // 检查是否匹配任一目标物品
+            boolean matchesKey = false;
+            for (String requiredItem : requiredItems) {
+                if (itemKey.equalsIgnoreCase(requiredItem)) {
+                    matchesKey = true;
+                    break;
+                }
+            }
+            if (!matchesKey) continue;
+
+            // 如果有NBT条件，检查NBT是否匹配
+            if (nbtConditions != null && !nbtConditions.isEmpty()) {
+                boolean matchesNbt = ItemUtil.matchesTarget(item, itemKey, nbtConditions);
+                if (!matchesNbt) continue;
+            }
+
             counts.merge(itemKey, item.getAmount(), Integer::sum);
         }
         return counts;
+    }
+
+    /**
+     * 统计背包中物品数量（支持CE物品）- 向后兼容方法
+     */
+    private Map<String, Integer> countItemsInInventory(Player player) {
+        return countItemsInInventory(player, List.of(), List.of());
     }
 
     /**
@@ -582,10 +608,10 @@ public class DailyTaskGUI extends AbstractGUI {
     }
 
     /**
-     * 从背包中扣除物品（支持CE物品）
+     * 从背包中扣除物品（支持CE物品和NBT匹配）
      * 返回实际扣除的数量
      */
-    private int removeItemsFromInventory(Player player, List<String> requiredItems, int amount) {
+    private int removeItemsFromInventory(Player player, List<String> requiredItems, int amount, List<String> nbtConditions) {
         if (amount <= 0) return 0;
 
         int remainingToRemove = amount;
@@ -596,14 +622,20 @@ public class DailyTaskGUI extends AbstractGUI {
 
             String itemKey = ItemUtil.getItemKey(item);
             // 检查是否匹配任一目标物品
-            boolean matches = false;
+            boolean matchesKey = false;
             for (String requiredItem : requiredItems) {
                 if (itemKey.equalsIgnoreCase(requiredItem)) {
-                    matches = true;
+                    matchesKey = true;
                     break;
                 }
             }
-            if (!matches) continue;
+            if (!matchesKey) continue;
+
+            // 如果有NBT条件，检查NBT是否匹配
+            if (nbtConditions != null && !nbtConditions.isEmpty()) {
+                boolean matchesNbt = ItemUtil.matchesTarget(item, itemKey, nbtConditions);
+                if (!matchesNbt) continue;
+            }
 
             int removeAmount = Math.min(item.getAmount(), remainingToRemove);
             if (removeAmount >= item.getAmount()) {

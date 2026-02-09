@@ -10,6 +10,7 @@ import net.momirealms.craftengine.core.block.ImmutableBlockState;
 import net.momirealms.craftengine.core.item.CustomItem;
 import net.momirealms.craftengine.core.item.ItemBuildContext;
 import net.momirealms.craftengine.core.util.Key;
+import de.tr7zw.nbtapi.iface.ReadWriteNBT;
 import org.bukkit.Material;
 import org.bukkit.block.Block;
 import org.bukkit.inventory.ItemStack;
@@ -17,6 +18,7 @@ import org.bukkit.inventory.meta.ItemMeta;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 public class ItemUtil {
@@ -116,7 +118,15 @@ public class ItemUtil {
         }
 
         ItemMeta meta = item.getItemMeta();
-        // 优先检查是否有Itemname名称（CE物品通常有）
+        // 优先检查是否有CustomName
+        if (meta != null && meta.hasCustomName()) {
+            Component customName = meta.customName();
+            if (customName != null) {
+                return LegacyComponentSerializer.legacySection().serialize(customName);
+            }
+        }
+
+        // 其次检查是否有ItemName名称（CE物品通常有）
         if (meta != null && meta.hasItemName()) {
             Component itemName = meta.itemName();
             if (itemName != null) {
@@ -289,6 +299,167 @@ public class ItemUtil {
     }
 
     /**
+     * 检查物品是否匹配目标key和NBT条件
+     * @param item 物品
+     * @param targetKey 目标物品key
+     * @param nbtConditions NBT条件列表，格式: "path+value" 或 "path>=value" 等
+     * @return 是否匹配
+     */
+    public static boolean matchesTarget(ItemStack item, String targetKey, List<String> nbtConditions) {
+        // 先匹配key
+        if (!matchesTarget(item, targetKey)) {
+            return false;
+        }
+
+        // 没有NBT条件，直接返回true
+        if (nbtConditions == null || nbtConditions.isEmpty()) {
+            return true;
+        }
+
+        // 检查所有NBT条件（AND关系）
+        for (String condition : nbtConditions) {
+            if (!matchesNbtCondition(item, condition)) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    /**
+     * 检查单个NBT条件是否匹配
+     * 支持的操作符: + (精确匹配), >=, <=, >, < (数值比较), exists (存在性检查)
+     * @param item 物品
+     * @param condition 条件字符串，如 "minecraft:custom_name+\"§6传说之剑\"" 或 "minecraft:enchantments.levels.minecraft:sharpness>=3"
+     * @return 是否匹配
+     */
+    public static boolean matchesNbtCondition(ItemStack item, String condition) {
+        if (item == null || condition == null || condition.isEmpty()) {
+            return false;
+        }
+
+        // 解析操作符
+        String[] operators = {">=", "<=", ">", "<", "+"};
+        String foundOperator = null;
+        int operatorIndex = -1;
+
+        for (String op : operators) {
+            operatorIndex = condition.indexOf(op);
+            if (operatorIndex != -1) {
+                foundOperator = op;
+                break;
+            }
+        }
+
+        // 处理 exists 特殊语法
+        if (condition.endsWith("+exists")) {
+            String path = condition.substring(0, condition.length() - 7);
+            return checkNbtExists(item, path);
+        }
+
+        if (foundOperator == null) {
+            return false;
+        }
+
+        String path = condition.substring(0, operatorIndex).trim();
+        String expectedValue = condition.substring(operatorIndex + foundOperator.length()).trim();
+
+        // 获取实际NBT值
+        Object actualValue = getNbtValue(item, path);
+
+        // 根据操作符比较
+        return switch (foundOperator) {
+            case "+" -> matchExact(actualValue, expectedValue);
+            case ">=" -> compareNumeric(actualValue, expectedValue) >= 0;
+            case "<=" -> compareNumeric(actualValue, expectedValue) <= 0;
+            case ">" -> compareNumeric(actualValue, expectedValue) > 0;
+            case "<" -> compareNumeric(actualValue, expectedValue) < 0;
+            default -> false;
+        };
+    }
+
+    /**
+     * 获取物品NBT路径的值
+     */
+    private static Object getNbtValue(ItemStack item, String path) {
+        if (item == null || path == null || path.isEmpty()) {
+            return null;
+        }
+
+        try {
+            return de.tr7zw.nbtapi.NBT.getComponents(item, nbt -> {
+                return NBTPathUtils.navigatePath(nbt, path);
+            });
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    /**
+     * 检查NBT路径是否存在
+     */
+    private static boolean checkNbtExists(ItemStack item, String path) {
+        if (item == null || path == null || path.isEmpty()) {
+            return false;
+        }
+
+        try {
+            return de.tr7zw.nbtapi.NBT.getComponents(item, nbt -> {
+                Object value = NBTPathUtils.navigatePath(nbt, path);
+                return value != null;
+            });
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
+    /**
+     * 精确匹配NBT值
+     */
+    private static boolean matchExact(Object actual, String expected) {
+        if (actual == null) {
+            return false;
+        }
+
+        // 解析期望值
+        Object parsedExpected = NBTPathUtils.parseValue(expected);
+
+        // 如果实际值是ReadableNBT，使用字符串比较
+        if (actual instanceof de.tr7zw.nbtapi.iface.ReadableNBT) {
+            return actual.toString().equals(parsedExpected.toString());
+        }
+
+        // 数值类型比较
+        if (actual instanceof Number && parsedExpected instanceof Number) {
+            return ((Number) actual).doubleValue() == ((Number) parsedExpected).doubleValue();
+        }
+
+        // 字符串比较
+        return actual.toString().equals(parsedExpected.toString());
+    }
+
+    /**
+     * 数值比较，返回 -1 (actual < expected), 0 (相等), 1 (actual > expected)
+     */
+    private static int compareNumeric(Object actual, String expected) {
+        if (!(actual instanceof Number)) {
+            return -1; // 非数值视为更小
+        }
+
+        double actualNum = ((Number) actual).doubleValue();
+
+        // 解析期望值
+        Object parsedExpected = NBTPathUtils.parseValue(expected);
+        if (!(parsedExpected instanceof Number)) {
+            return -1;
+        }
+
+        double expectedNum = ((Number) parsedExpected).doubleValue();
+
+        return Double.compare(actualNum, expectedNum);
+    }
+
+    /**
      * 将 § 格式颜色代码转换为 Adventure Component
      * @param message 包含 § 颜色代码的消息
      * @return Adventure Component 对象
@@ -340,6 +511,143 @@ public class ItemUtil {
             // CE API 调用失败
         }
         return null;
+    }
+
+    // ==================== NBT 组件方法 (从 folia_shop 拷贝) ====================
+
+    /**
+     * 应用 NBT 组件到物品
+     * @param item 目标物品（会被直接修改）
+     * @param components NBT 组件配置 (path -> value)
+     * @return 应用后的物品（同一个实例）
+     */
+    public static ItemStack applyComponents(ItemStack item, Map<String, String> components) {
+        if (item == null || components == null || components.isEmpty()) {
+            return item;
+        }
+
+        de.tr7zw.nbtapi.NBT.modifyComponents(item, (ReadWriteNBT nbt) -> {
+            for (Map.Entry<String, String> entry : components.entrySet()) {
+                String path = entry.getKey();
+                String valueStr = entry.getValue();
+
+                try {
+                    // 解析值
+                    Object value = NBTPathUtils.parseValue(valueStr);
+
+                    // 应用设置
+                    applySetNbt(nbt, path, value);
+                } catch (Exception e) {
+                    // 忽略单个组件的错误，继续处理其他组件
+                }
+            }
+        });
+        return item;
+    }
+
+    /**
+     * 从配置解析组件配置（字符串列表格式）
+     * 格式: "path+value" 或 "path+{nbt}"
+     * 示例:
+     *   - "minecraft:enchantments+{levels:{'minecraft:sharpness':5}}"
+     *   - "minecraft:custom_name+'\"传说之剑\"'"
+     * @param obj 配置对象（必须是字符串列表）
+     * @return 组件映射，如果没有则返回空 map
+     */
+    @SuppressWarnings("unchecked")
+    public static Map<String, String> parseComponents(Object obj) {
+        Map<String, String> components = new java.util.HashMap<>();
+        if (obj == null) {
+            return components;
+        }
+
+        // 只支持字符串列表格式: components: ["path+value", "path+value"]
+        if (obj instanceof java.util.List) {
+            java.util.List<String> list = (java.util.List<String>) obj;
+            for (String entry : list) {
+                parseComponentEntry(entry, components);
+            }
+        }
+
+        return components;
+    }
+
+    /**
+     * 解析单个组件条目
+     * 格式: "path+value"
+     */
+    private static void parseComponentEntry(String entry, Map<String, String> components) {
+        if (entry == null || entry.isEmpty()) {
+            return;
+        }
+
+        // 找到第一个 + 分隔符
+        int firstPlus = entry.indexOf('+');
+        if (firstPlus == -1) {
+            // 没有 +，视为只有路径，值为空
+            return;
+        }
+
+        String path = entry.substring(0, firstPlus).trim();
+        String value = entry.substring(firstPlus + 1).trim();
+
+        if (!path.isEmpty()) {
+            components.put(path, value);
+        }
+    }
+
+    /**
+     * 移除指定路径的 NBT
+     */
+    public static void applyRemoveNbt(de.tr7zw.nbtapi.iface.ReadWriteNBT nbt, String path) {
+        NBTPathUtils.PathNavigationResult result = NBTPathUtils.navigateToParent(nbt, path);
+        if (!result.isSuccess()) {
+            return;
+        }
+
+        de.tr7zw.nbtapi.iface.ReadWriteNBT parent = result.getParent();
+        String key = result.getLastKey();
+        List<NBTPathUtils.PathSegment> segments = NBTPathUtils.parsePath(path);
+        NBTPathUtils.PathSegment lastSegment = segments.get(segments.size() - 1);
+
+        if (lastSegment.hasIndex()) {
+            NBTPathUtils.removeListElement(parent, key, lastSegment.getIndex());
+        } else if (lastSegment.hasFilter()) {
+            Integer index = NBTPathUtils.resolveListFilterIndex(parent, key, lastSegment.getFilter());
+            if (index != null) {
+                NBTPathUtils.removeListElement(parent, key, index);
+            }
+        } else {
+            parent.removeKey(key);
+        }
+    }
+
+    /**
+     * 设置指定路径的 NBT 值
+     */
+    public static void applySetNbt(de.tr7zw.nbtapi.iface.ReadWriteNBT nbt, String path, Object value) {
+        NBTPathUtils.PathNavigationResult result = NBTPathUtils.navigateToParent(nbt, path);
+        if (!result.isSuccess()) {
+            return;
+        }
+
+        de.tr7zw.nbtapi.iface.ReadWriteNBT parent = result.getParent();
+        String key = result.getLastKey();
+        List<NBTPathUtils.PathSegment> segments = NBTPathUtils.parsePath(path);
+        NBTPathUtils.PathSegment lastSegment = segments.get(segments.size() - 1);
+
+        if (lastSegment.hasIndex()) {
+            if (value instanceof de.tr7zw.nbtapi.iface.ReadableNBT) {
+                NBTPathUtils.replaceInCompoundList(parent, key, lastSegment.getIndex(), (de.tr7zw.nbtapi.iface.ReadableNBT) value);
+            }
+        } else if (lastSegment.hasFilter()) {
+            Integer index = NBTPathUtils.resolveListFilterIndex(parent, key, lastSegment.getFilter());
+            if (index != null && value instanceof de.tr7zw.nbtapi.iface.ReadableNBT) {
+                NBTPathUtils.replaceInCompoundList(parent, key, index, (de.tr7zw.nbtapi.iface.ReadableNBT) value);
+            }
+        } else {
+            NBTPathUtils.setTypedValue(parent, key, value);
+        }
     }
 
 }

@@ -18,6 +18,9 @@ dependencies {
     compileOnly("net.momirealms:craft-engine-bukkit:0.0.67")
     compileOnly("net.momirealms:craft-engine-core:0.0.67")
 
+    // NBT API
+    compileOnly("de.tr7zw:item-nbt-api-plugin:2.15.5")
+
     // Database (打包进JAR)
     implementation("com.zaxxer:HikariCP:6.2.1")
     implementation("com.h2database:h2:2.3.232")
