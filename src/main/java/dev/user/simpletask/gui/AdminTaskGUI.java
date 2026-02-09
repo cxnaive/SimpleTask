@@ -195,6 +195,9 @@ public class AdminTaskGUI extends AbstractGUI {
     }
 
     private ItemStack createDecoration(Material material, String name) {
-        return ItemUtil.createDecoration(material, name);
+        // 先解析 MiniMessage，然后序列化为 legacy 格式供 ItemUtil 使用
+        Component component = MiniMessage.miniMessage().deserialize(name);
+        String legacyName = net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer.legacySection().serialize(component);
+        return ItemUtil.createDecoration(material, legacyName);
     }
 }

@@ -198,8 +198,31 @@ public class DatabaseManager {
     }
 
     private void createIndexes(Statement stmt) throws SQLException {
-        stmt.execute("CREATE INDEX IF NOT EXISTS idx_player_tasks_date ON player_daily_tasks (player_uuid, task_date)");
-        stmt.execute("CREATE INDEX IF NOT EXISTS idx_task_templates_key ON task_templates (task_key)");
+        boolean isMySQL = isMySQL();
+        if (isMySQL) {
+            // MySQL 不支持 CREATE INDEX IF NOT EXISTS，先检查再创建
+            createMySQLIndexIfNotExists(stmt, "player_daily_tasks", "idx_player_tasks_date", "player_uuid, task_date");
+            createMySQLIndexIfNotExists(stmt, "task_templates", "idx_task_templates_key", "task_key");
+        } else {
+            // H2 支持 IF NOT EXISTS
+            stmt.execute("CREATE INDEX IF NOT EXISTS idx_player_tasks_date ON player_daily_tasks (player_uuid, task_date)");
+            stmt.execute("CREATE INDEX IF NOT EXISTS idx_task_templates_key ON task_templates (task_key)");
+        }
+    }
+
+    private void createMySQLIndexIfNotExists(Statement stmt, String table, String indexName, String columns) throws SQLException {
+        // 查询 information_schema 检查索引是否存在
+        String checkSql = String.format(
+            "SELECT COUNT(*) FROM information_schema.STATISTICS " +
+            "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = '%s' AND INDEX_NAME = '%s'",
+            table, indexName
+        );
+        try (ResultSet rs = stmt.executeQuery(checkSql)) {
+            if (rs.next() && rs.getInt(1) == 0) {
+                // 索引不存在，创建
+                stmt.execute(String.format("ALTER TABLE %s ADD INDEX %s (%s)", table, indexName, columns));
+            }
+        }
     }
 
     public Connection getConnection() throws SQLException {
