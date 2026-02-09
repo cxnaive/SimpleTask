@@ -652,6 +652,72 @@ public class TaskManager {
     }
 
     /**
+     * 强制刷新玩家所有任务（无视完成状态，删除所有任务重新生成）
+     * @param player 玩家
+     * @param notify 是否通知玩家
+     * @param callback 回调函数
+     */
+    public void forceRerollPlayerTasks(Player player, boolean notify, java.util.function.Consumer<Boolean> callback) {
+        UUID uuid = player.getUniqueId();
+        LocalDate today = TimeUtil.getToday();
+        int taskCount = plugin.getConfigManager().getDailyTaskCount();
+
+        // 先检查是否有可用模板
+        if (templateSyncManager.getAllTemplates().isEmpty()) {
+            plugin.getLogger().warning("Cannot generate tasks: no task templates available");
+            callback.accept(false);
+            return;
+        }
+
+        databaseQueue.submit("forceRerollPlayerTasks", (conn) -> {
+            // 删除所有任务（不管是否完成）
+            String deleteSql = "DELETE FROM player_daily_tasks WHERE player_uuid = ? AND task_date = ?";
+            try (PreparedStatement ps = conn.prepareStatement(deleteSql)) {
+                ps.setString(1, uuid.toString());
+                ps.setDate(2, java.sql.Date.valueOf(today));
+                ps.executeUpdate();
+            }
+
+            // 生成新任务
+            doGenerateTasks(conn, player, uuid, today, taskCount, notify);
+            return true;
+        }, callback, e -> {
+            plugin.getLogger().log(Level.SEVERE, "Failed to force reroll tasks for player: " + player.getName(), e);
+            callback.accept(false);
+        });
+    }
+
+    /**
+     * 强制刷新所有在线玩家的任务（无视完成状态）
+     * @param notify 是否通知玩家
+     * @param callback 回调函数
+     */
+    public void forceRerollAllPlayerTasks(boolean notify, java.util.function.Consumer<Boolean> callback) {
+        List<Player> players = new ArrayList<>(Bukkit.getOnlinePlayers());
+        if (players.isEmpty()) {
+            callback.accept(true);
+            return;
+        }
+
+        AtomicInteger successCount = new AtomicInteger(0);
+        AtomicInteger completedCount = new AtomicInteger(0);
+        int total = players.size();
+
+        for (Player player : players) {
+            forceRerollPlayerTasks(player, notify, success -> {
+                if (success) {
+                    successCount.incrementAndGet();
+                }
+                completedCount.incrementAndGet();
+
+                if (completedCount.get() == total) {
+                    callback.accept(successCount.get() == total);
+                }
+            });
+        }
+    }
+
+    /**
      * 玩家付费刷新每日任务
      * @param player 玩家
      * @param callback 回调函数，返回刷新结果和消息
@@ -694,18 +760,18 @@ public class TaskManager {
 
             // 检查次数限制
             if (currentRerolls >= maxRerolls) {
-                return new RerollResult(false, "<red>今日刷新次数已用完（上限：" + maxRerolls + "次）", currentRerolls);
+                return new RerollCheckResult(false, "<red>今日刷新次数已用完（上限：" + maxRerolls + "次）", currentRerolls);
             }
 
             // 检查金币（如果配置了花费）
             if (cost > 0 && plugin.getEconomyManager().isEnabled()) {
                 double balance = plugin.getEconomyManager().getBalance(player);
                 if (balance < cost) {
-                    return new RerollResult(false, "<red>金币不足，需要 " + cost + " 金币", currentRerolls);
+                    return new RerollCheckResult(false, "<red>金币不足，需要 " + cost + " 金币", currentRerolls);
                 }
             }
 
-            return new RerollResult(true, null, currentRerolls);
+            return new RerollCheckResult(true, null, currentRerolls);
         }, result -> {
             if (!result.success) {
                 callback.accept(false, result.message);
@@ -729,58 +795,227 @@ public class TaskManager {
         });
     }
 
-    private record RerollResult(boolean success, String message, int currentRerolls) {}
+    private record RerollCheckResult(boolean success, String message, int currentRerolls) {}
 
     private void doPlayerReroll(Player player, LocalDate today, int newRerollCount,
                                 java.util.function.BiConsumer<Boolean, String> callback) {
         UUID uuid = player.getUniqueId();
         int taskCount = plugin.getConfigManager().getDailyTaskCount();
+        boolean keepCompleted = plugin.getConfigManager().isRerollKeepCompleted();
 
         databaseQueue.submit("doPlayerReroll", (conn) -> {
-            // 先删除今日旧任务
-            String deleteSql = "DELETE FROM player_daily_tasks WHERE player_uuid = ? AND task_date = ?";
-            try (PreparedStatement ps = conn.prepareStatement(deleteSql)) {
-                ps.setString(1, uuid.toString());
-                ps.setDate(2, java.sql.Date.valueOf(today));
-                ps.executeUpdate();
-            }
-
-            // 生成新任务
-            doGenerateTasks(conn, player, uuid, today, taskCount, false);
-
-            // 更新刷新次数
-            String updateRerollSql;
-            if (isH2Database()) {
-                updateRerollSql = "MERGE INTO player_task_reset (player_uuid, last_reset_date, reroll_count) KEY(player_uuid) VALUES (?, ?, ?)";
+            if (keepCompleted) {
+                // 新模式：只刷新未完成的任务
+                return doPartialReroll(conn, player, uuid, today, taskCount, newRerollCount);
             } else {
-                updateRerollSql = "INSERT INTO player_task_reset (player_uuid, last_reset_date, reroll_count) VALUES (?, ?, ?) " +
-                        "ON DUPLICATE KEY UPDATE reroll_count = ?";
+                // 旧模式：刷新所有任务
+                return doFullReroll(conn, player, uuid, today, taskCount, newRerollCount);
             }
-
-            try (PreparedStatement ps = conn.prepareStatement(updateRerollSql)) {
-                ps.setString(1, uuid.toString());
-                ps.setDate(2, java.sql.Date.valueOf(today));
-                ps.setInt(3, newRerollCount);
-                if (!isH2Database()) {
-                    ps.setInt(4, newRerollCount);
-                }
-                ps.executeUpdate();
-            }
-
-            return true;
-        }, success -> {
-            if (success) {
+        }, result -> {
+            if (result.success) {
                 // 清除本地缓存，下次加载时会重新查询数据库
                 playerTasks.remove(uuid);
-                callback.accept(true, "<green>每日任务已刷新！今日已使用 " + newRerollCount + "/" +
-                        plugin.getConfigManager().getDailyRerollMax() + " 次刷新");
+                callback.accept(true, result.message);
             } else {
-                callback.accept(false, "<red>刷新失败");
+                callback.accept(false, result.message);
             }
         }, e -> {
             plugin.getLogger().log(Level.SEVERE, "Failed to reroll tasks for player: " + player.getName(), e);
             callback.accept(false, "<red>刷新失败，请重试");
         });
+    }
+
+    private record RerollResult(boolean success, String message) {}
+
+    /**
+     * 完全刷新模式 - 删除所有任务并重新生成
+     */
+    private RerollResult doFullReroll(Connection conn, Player player, UUID uuid, LocalDate today,
+                                      int taskCount, int newRerollCount) throws SQLException {
+        // 删除今日旧任务
+        String deleteSql = "DELETE FROM player_daily_tasks WHERE player_uuid = ? AND task_date = ?";
+        try (PreparedStatement ps = conn.prepareStatement(deleteSql)) {
+            ps.setString(1, uuid.toString());
+            ps.setDate(2, java.sql.Date.valueOf(today));
+            ps.executeUpdate();
+        }
+
+        // 生成新任务
+        doGenerateTasks(conn, player, uuid, today, taskCount, false);
+
+        // 更新刷新次数
+        updateRerollCount(conn, uuid, today, newRerollCount);
+
+        return new RerollResult(true, "<green>每日任务已刷新！今日已使用 " + newRerollCount + "/" +
+                plugin.getConfigManager().getDailyRerollMax() + " 次刷新");
+    }
+
+    /**
+     * 部分刷新模式 - 只刷新未完成的任务，保留已领取的任务
+     */
+    private RerollResult doPartialReroll(Connection conn, Player player, UUID uuid, LocalDate today,
+                                         int taskCount, int newRerollCount) throws SQLException {
+        // 1. 查询已完成的任务数量（claimed = TRUE）
+        String countCompletedSql = "SELECT COUNT(*) as completed_count FROM player_daily_tasks " +
+                "WHERE player_uuid = ? AND task_date = ? AND claimed = TRUE";
+        int completedCount = 0;
+        try (PreparedStatement ps = conn.prepareStatement(countCompletedSql)) {
+            ps.setString(1, uuid.toString());
+            ps.setDate(2, java.sql.Date.valueOf(today));
+            try (ResultSet rs = ps.executeQuery()) {
+                if (rs.next()) {
+                    completedCount = rs.getInt("completed_count");
+                }
+            }
+        }
+
+        // 2. 检查是否所有任务都已完成
+        if (completedCount >= taskCount) {
+            return new RerollResult(false, "<red>今日所有任务都已完成，无需刷新");
+        }
+
+        // 3. 计算需要生成的新任务数量
+        int needToGenerate = taskCount - completedCount;
+
+        // 4. 查询已存在的任务key（包括已完成和未完成的）
+        Set<String> existingTaskKeys = new HashSet<>();
+        String selectExistingSql = "SELECT task_key FROM player_daily_tasks " +
+                "WHERE player_uuid = ? AND task_date = ?";
+        try (PreparedStatement ps = conn.prepareStatement(selectExistingSql)) {
+            ps.setString(1, uuid.toString());
+            ps.setDate(2, java.sql.Date.valueOf(today));
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) {
+                    existingTaskKeys.add(rs.getString("task_key"));
+                }
+            }
+        }
+
+        // 5. 只删除未完成的任务（claimed = FALSE）
+        String deleteUnclaimedSql = "DELETE FROM player_daily_tasks " +
+                "WHERE player_uuid = ? AND task_date = ? AND claimed = FALSE";
+        int deletedCount = 0;
+        try (PreparedStatement ps = conn.prepareStatement(deleteUnclaimedSql)) {
+            ps.setString(1, uuid.toString());
+            ps.setDate(2, java.sql.Date.valueOf(today));
+            deletedCount = ps.executeUpdate();
+        }
+
+        // 6. 从可用模板中排除已存在的任务key，然后随机选择
+        List<TaskTemplate> availableTemplates = new ArrayList<>(templateSyncManager.getAllTemplates());
+        availableTemplates.removeIf(t -> existingTaskKeys.contains(t.getTaskKey()));
+
+        if (availableTemplates.size() < needToGenerate) {
+            plugin.getLogger().warning("Not enough available templates for player " + player.getName() +
+                    ". Need " + needToGenerate + ", available " + availableTemplates.size());
+            // 如果模板不够，使用所有可用模板
+            needToGenerate = availableTemplates.size();
+        }
+
+        if (needToGenerate <= 0) {
+            return new RerollResult(false, "<red>没有更多可用的任务模板可以刷新");
+        }
+
+        List<TaskTemplate> selectedTasks = selectRandomTasksFromList(availableTemplates, needToGenerate);
+
+        // 7. 插入新任务
+        String insertSql = """
+            INSERT INTO player_daily_tasks
+            (player_uuid, task_key, task_version, current_progress, completed, claimed, task_date, task_data)
+            VALUES (?, ?, ?, 0, FALSE, FALSE, ?, ?)
+            """;
+
+        try (PreparedStatement ps = conn.prepareStatement(insertSql)) {
+            for (TaskTemplate template : selectedTasks) {
+                ps.setString(1, uuid.toString());
+                ps.setString(2, template.getTaskKey());
+                ps.setInt(3, template.getVersion());
+                ps.setDate(4, java.sql.Date.valueOf(today));
+                ps.setString(5, template.toJson());
+                ps.executeUpdate();
+            }
+        }
+
+        // 8. 更新刷新次数
+        updateRerollCount(conn, uuid, today, newRerollCount);
+
+        // 9. 更新内存中的任务列表
+        List<PlayerTask> currentTasks = new ArrayList<>();
+        // 重新加载所有任务到内存
+        String reloadSql = "SELECT * FROM player_daily_tasks WHERE player_uuid = ? AND task_date = ?";
+        try (PreparedStatement ps = conn.prepareStatement(reloadSql)) {
+            ps.setString(1, uuid.toString());
+            ps.setDate(2, java.sql.Date.valueOf(today));
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) {
+                    PlayerTask task = parsePlayerTaskFromResultSet(uuid, rs);
+                    if (task != null) {
+                        currentTasks.add(task);
+                    }
+                }
+            }
+        }
+        playerTasks.put(uuid, new CopyOnWriteArrayList<>(currentTasks));
+
+        return new RerollResult(true, "<green>已刷新 " + deletedCount + " 个未完成任务，保留了 " +
+                completedCount + " 个已完成任务！今日已使用 " + newRerollCount + "/" +
+                plugin.getConfigManager().getDailyRerollMax() + " 次刷新");
+    }
+
+    /**
+     * 更新玩家刷新次数
+     */
+    private void updateRerollCount(Connection conn, UUID uuid, LocalDate today, int newRerollCount) throws SQLException {
+        String updateRerollSql;
+        if (isH2Database()) {
+            updateRerollSql = "MERGE INTO player_task_reset (player_uuid, last_reset_date, reroll_count) KEY(player_uuid) VALUES (?, ?, ?)";
+        } else {
+            updateRerollSql = "INSERT INTO player_task_reset (player_uuid, last_reset_date, reroll_count) VALUES (?, ?, ?) " +
+                    "ON DUPLICATE KEY UPDATE reroll_count = ?";
+        }
+
+        try (PreparedStatement ps = conn.prepareStatement(updateRerollSql)) {
+            ps.setString(1, uuid.toString());
+            ps.setDate(2, java.sql.Date.valueOf(today));
+            ps.setInt(3, newRerollCount);
+            if (!isH2Database()) {
+                ps.setInt(4, newRerollCount);
+            }
+            ps.executeUpdate();
+        }
+    }
+
+    /**
+     * 从指定列表中随机选择指定数量的任务模板
+     */
+    private List<TaskTemplate> selectRandomTasksFromList(List<TaskTemplate> available, int count) {
+        List<TaskTemplate> selected = new ArrayList<>();
+        if (available.isEmpty() || count <= 0) {
+            return selected;
+        }
+
+        List<TaskTemplate> tempList = new ArrayList<>(available);
+        Random random = new Random();
+
+        for (int i = 0; i < count && !tempList.isEmpty(); i++) {
+            int totalWeight = tempList.stream().mapToInt(TaskTemplate::getWeight).sum();
+            if (totalWeight <= 0) break;
+
+            int randomValue = random.nextInt(totalWeight);
+            int currentWeight = 0;
+
+            for (Iterator<TaskTemplate> it = tempList.iterator(); it.hasNext(); ) {
+                TaskTemplate template = it.next();
+                currentWeight += template.getWeight();
+                if (randomValue < currentWeight) {
+                    selected.add(template);
+                    it.remove();
+                    break;
+                }
+            }
+        }
+
+        return selected;
     }
 
     private boolean isH2Database() {

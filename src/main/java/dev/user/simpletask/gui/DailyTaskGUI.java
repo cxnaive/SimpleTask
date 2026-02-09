@@ -247,10 +247,16 @@ public class DailyTaskGUI extends AbstractGUI {
         // Refresh button at slot 51 - 刷新每日任务
         int maxRerolls = plugin.getConfigManager().getDailyRerollMax();
         double rerollCost = plugin.getConfigManager().getDailyRerollCost();
+        boolean keepCompleted = plugin.getConfigManager().isRerollKeepCompleted();
 
         // 获取今日已使用刷新次数
         int usedRerolls = getTodayRerollCount(player);
         int remainingRerolls = maxRerolls - usedRerolls;
+
+        // 计算已完成任务数量
+        long completedTasks = tasks.stream().filter(PlayerTask::isClaimed).count();
+        int totalTasks = tasks.size();
+        int willRefreshCount = keepCompleted ? (int) (totalTasks - completedTasks) : totalTasks;
 
         String rerollName;
         List<String> rerollLore = new ArrayList<>();
@@ -271,6 +277,13 @@ public class DailyTaskGUI extends AbstractGUI {
                 rerollLore.add("<green>免费");
             }
             rerollLore.add("");
+            // 显示刷新详情
+            if (keepCompleted && totalTasks > 0) {
+                rerollLore.add("<gray>当前: <green>" + completedTasks + "<gray>/<yellow>" + totalTasks + " <gray>已完成");
+                rerollLore.add("<gray>将刷新: <yellow>" + willRefreshCount + " <gray>个未完成任务");
+                rerollLore.add("<gray>保留: <green>" + completedTasks + " <gray>个已完成任务");
+                rerollLore.add("");
+            }
             rerollLore.add("<yellow>点击刷新每日任务");
         }
 
@@ -295,6 +308,11 @@ public class DailyTaskGUI extends AbstractGUI {
             }
             if (remainingRerolls <= 0) {
                 p.sendMessage(MiniMessage.miniMessage().deserialize("<red>今日刷新次数已用完"));
+                return;
+            }
+            // 检查是否所有任务都已完成（仅在保留已完成模式下）
+            if (keepCompleted && completedTasks >= totalTasks && totalTasks > 0) {
+                p.sendMessage(MiniMessage.miniMessage().deserialize("<red>今日所有任务都已完成，无需刷新"));
                 return;
             }
 

@@ -79,6 +79,14 @@ public class AdminCommand implements CommandExecutor, TabCompleter {
                 rerollTasks(sender, args[1]);
                 return true;
             }
+            case "rerollall" -> {
+                if (args.length < 2) {
+                    MessageUtil.sendMiniMessage(sender, "<red>用法: /taskadmin rerollall <玩家名/all>");
+                    return true;
+                }
+                rerollAllTasks(sender, args[1]);
+                return true;
+            }
             case "assign" -> {
                 if (args.length < 3) {
                     MessageUtil.sendMiniMessage(sender, "\u003cred\u003e用法: /taskadmin assign \u003c任务key\u003e \u003c玩家名/all\u003e");
@@ -136,7 +144,7 @@ public class AdminCommand implements CommandExecutor, TabCompleter {
 
         if (args.length == 1) {
             // 第一级子命令
-            String[] subCommands = {"reloadconfig", "reloadfromdb", "import", "list", "delete", "reroll", "assign", "help"};
+            String[] subCommands = {"reloadconfig", "reloadfromdb", "import", "list", "delete", "reroll", "rerollall", "assign", "help"};
             for (String sub : subCommands) {
                 if (sub.toLowerCase().startsWith(args[0].toLowerCase())) {
                     completions.add(sub);
@@ -157,8 +165,8 @@ public class AdminCommand implements CommandExecutor, TabCompleter {
                     completions.add(player.getName());
                 }
             }
-        } else if (args.length == 2 && args[0].equalsIgnoreCase("reroll")) {
-            // reroll 命令的补全 - 在线玩家名 + all
+        } else if (args.length == 2 && (args[0].equalsIgnoreCase("reroll") || args[0].equalsIgnoreCase("rerollall"))) {
+            // reroll 和 rerollall 命令的补全 - 在线玩家名 + all
             completions.add("all");
             for (Player player : plugin.getServer().getOnlinePlayers()) {
                 if (player.getName().toLowerCase().startsWith(args[1].toLowerCase())) {
@@ -231,6 +239,48 @@ public class AdminCommand implements CommandExecutor, TabCompleter {
                 MessageUtil.sendMiniMessage(sender, "<red>删除任务失败，请检查数据库连接");
             }
         });
+    }
+
+    private void rerollAllTasks(CommandSender sender, String target) {
+        if (target.equalsIgnoreCase("all")) {
+            // 强制刷新所有在线玩家的所有任务
+            int count = plugin.getServer().getOnlinePlayers().size();
+            if (count == 0) {
+                MessageUtil.sendMiniMessage(sender, "<red>当前没有在线玩家");
+                return;
+            }
+
+            plugin.getTaskManager().forceRerollAllPlayerTasks(true, success -> {
+                if (success) {
+                    Map<String, String> placeholders = new HashMap<>();
+                    placeholders.put("count", String.valueOf(count));
+                    MessageUtil.sendMiniMessage(sender, "<green>已为所有在线玩家强制刷新所有任务 (<yellow>{count}<green>人)", placeholders);
+                } else {
+                    MessageUtil.sendMiniMessage(sender, "<red>强制刷新任务失败，请检查数据库连接");
+                }
+            });
+        } else {
+            // 强制刷新指定玩家的所有任务
+            Player targetPlayer = plugin.getServer().getPlayerExact(target);
+            if (targetPlayer == null || !targetPlayer.isOnline()) {
+                Map<String, String> placeholders = new HashMap<>();
+                placeholders.put("player", target);
+                MessageUtil.sendMiniMessage(sender, plugin.getConfigManager().getAdminMessage("reroll-fail-player-not-found", placeholders));
+                return;
+            }
+
+            plugin.getTaskManager().forceRerollPlayerTasks(targetPlayer, true, success -> {
+                if (success) {
+                    Map<String, String> placeholders = new HashMap<>();
+                    placeholders.put("player", targetPlayer.getName());
+                    MessageUtil.sendMiniMessage(sender, "<green>已为玩家 <yellow>{player} <green>强制刷新所有任务", placeholders);
+                } else {
+                    Map<String, String> placeholders = new HashMap<>();
+                    placeholders.put("player", targetPlayer.getName());
+                    MessageUtil.sendMiniMessage(sender, "<red>强制刷新 {player} 的任务失败", placeholders);
+                }
+            });
+        }
     }
 
     private void rerollTasks(CommandSender sender, String target) {
@@ -364,6 +414,7 @@ public class AdminCommand implements CommandExecutor, TabCompleter {
             MessageUtil.sendMiniMessage(sender, "\u003cyellow\u003e/taskadmin reloadconfig \u003cgray\u003e- 重新加载配置文件");
             MessageUtil.sendMiniMessage(sender, "\u003cyellow\u003e/taskadmin reloadfromdb \u003cgray\u003e- 从数据库重新加载模板");
             MessageUtil.sendMiniMessage(sender, "\u003cyellow\u003e/taskadmin reroll \u003c玩家名/all\u003e \u003cgray\u003e- 重新抽取每日任务");
+            MessageUtil.sendMiniMessage(sender, "\u003cyellow\u003e/taskadmin rerollall \u003c玩家名/all\u003e \u003cgray\u003e- 强制刷新所有任务(无视完成状态)");
             MessageUtil.sendMiniMessage(sender, "\u003cyellow\u003e/taskadmin assign \u003c任务key\u003e \u003c玩家名/all\u003e \u003cgray\u003e- 给玩家添加指定任务");
         } else {
             // 控制台只显示管理员命令
@@ -375,6 +426,7 @@ public class AdminCommand implements CommandExecutor, TabCompleter {
             MessageUtil.sendMiniMessage(sender, "\u003cyellow\u003e/taskadmin reloadconfig \u003cgray\u003e- 重新加载配置文件");
             MessageUtil.sendMiniMessage(sender, "\u003cyellow\u003e/taskadmin reloadfromdb \u003cgray\u003e- 从数据库重新加载模板");
             MessageUtil.sendMiniMessage(sender, "\u003cyellow\u003e/taskadmin reroll \u003c玩家名/all\u003e \u003cgray\u003e- 重新抽取每日任务");
+            MessageUtil.sendMiniMessage(sender, "\u003cyellow\u003e/taskadmin rerollall \u003c玩家名/all\u003e \u003cgray\u003e- 强制刷新所有任务(无视完成状态)");
             MessageUtil.sendMiniMessage(sender, "\u003cyellow\u003e/taskadmin assign \u003c任务key\u003e \u003c玩家名/all\u003e \u003cgray\u003e- 给玩家添加指定任务");
         }
     }

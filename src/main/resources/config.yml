@@ -27,6 +27,8 @@ daily-tasks:
     max-per-day: 3
     # 每次刷新花费的金币 (0=免费)
     cost: 100
+    # 是否保留已完成的任务 (true=只刷新未完成的任务, false=刷新所有任务)
+    keep-completed: true
 
 # 防刷任务设置
 anti-cheat:
