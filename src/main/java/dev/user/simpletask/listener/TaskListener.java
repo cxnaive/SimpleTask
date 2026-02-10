@@ -4,8 +4,10 @@ import dev.user.simpletask.SimpleTaskPlugin;
 import dev.user.simpletask.task.TaskManager;
 import dev.user.simpletask.task.TaskType;
 import dev.user.simpletask.util.ItemUtil;
+import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.block.Block;
+import org.bukkit.block.BlockState;
 import org.bukkit.block.data.Ageable;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.FishHook;
@@ -15,8 +17,11 @@ import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.event.block.BlockBreakEvent;
+import org.bukkit.event.block.BlockDropItemEvent;
 import org.bukkit.event.block.BlockPlaceEvent;
+import org.bukkit.event.player.PlayerHarvestBlockEvent;
 import org.bukkit.event.inventory.CraftItemEvent;
+import org.bukkit.event.inventory.SmithItemEvent;
 import org.bukkit.event.player.PlayerFishEvent;
 import org.bukkit.event.player.PlayerItemConsumeEvent;
 import org.bukkit.event.player.PlayerJoinEvent;
@@ -26,10 +31,25 @@ import org.bukkit.event.entity.EntityDeathEvent;
 import org.bukkit.event.entity.EntityBreedEvent;
 import org.bukkit.inventory.ItemStack;
 
+import com.google.common.cache.Cache;
+import com.google.common.cache.CacheBuilder;
+
+import java.util.UUID;
+import java.util.concurrent.TimeUnit;
+
 public class TaskListener implements Listener {
 
     private final SimpleTaskPlugin plugin;
     private final TaskManager taskManager;
+
+    // 临时存储玩家破坏的方块信息（用于 BlockDropItemEvent）
+    // Key: playerUUID + location, Value: BlockBreakInfo
+    // 5秒自动过期，防止内存泄漏
+    private final Cache<String, BlockBreakInfo> brokenBlockInfo = CacheBuilder.newBuilder()
+            .expireAfterWrite(5, TimeUnit.SECONDS)
+            .build();
+
+    private record BlockBreakInfo(BlockState state, boolean isPlayerPlaced) {}
 
     public TaskListener(SimpleTaskPlugin plugin) {
         this.plugin = plugin;
@@ -94,6 +114,31 @@ public class TaskListener implements Listener {
     }
 
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    public void onSmithItem(SmithItemEvent event) {
+        if (!(event.getWhoClicked() instanceof Player player)) {
+            return;
+        }
+
+        // 获取锻造结果
+        ItemStack result = event.getInventory().getResult();
+        if (result == null || result.getType() == Material.AIR) {
+            return;
+        }
+
+        String itemKey = ItemUtil.getItemKey(result);
+        if (itemKey == null) {
+            itemKey = "minecraft:" + result.getType().name().toLowerCase();
+        }
+
+        // 锻造台一次只能合成1个物品
+        final String finalItemKey = itemKey;
+        final ItemStack finalResult = result.clone();
+
+        // updateProgress handles its own async database operations
+        taskManager.updateProgress(player, TaskType.CRAFT, finalItemKey, finalResult, 1);
+    }
+
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
     public void onPlayerFish(PlayerFishEvent event) {
         if (event.getState() != PlayerFishEvent.State.CAUGHT_FISH) {
             return;
@@ -139,57 +184,182 @@ public class TaskListener implements Listener {
     public void onBlockBreak(BlockBreakEvent event) {
         Player player = event.getPlayer();
         Block block = event.getBlock();
+        Material type = block.getType();
 
         // Get item key for the block (support CE custom blocks)
         String itemKey = ItemUtil.getBlockKey(block);
 
-        // 检查是否是可收获的成熟作物
-        boolean isHarvestable = isHarvestableCrop(block) && isFullyGrown(block);
-
-        // 如果是成熟作物，同时触发 HARVEST 和 BREAK
-        // 例如：破坏成熟的土豆 -> 触发"收获土豆"(HARVEST) + "挖掘泥土"(BREAK)
-        if (isHarvestable) {
-            taskManager.updateProgress(player, TaskType.HARVEST, itemKey, 1);
-        }
-
-        // BREAK 类型：先检查是否是玩家自己放置的（防刷检测），再清除记录
+        // 检查是否是玩家自己放置的（防刷检测）
         boolean isPlayerPlaced = plugin.getAntiCheatManager().isPlayerPlacedBlock(block.getLocation());
 
-        // 清除防刷记录（无论谁破坏的，都清除该位置的记录）
-        plugin.getAntiCheatManager().removeBlockRecord(block.getLocation());
-
-        // 如果不是玩家放置的，才计入 BREAK 任务进度
+        // 保存方块信息供 BlockDropItemEvent 使用（在清除防刷记录之前）
+        saveBlockBreakInfo(player, block, isPlayerPlaced);
         if (!isPlayerPlaced) {
             taskManager.updateProgress(player, TaskType.BREAK, itemKey, 1);
-        } else {
-            plugin.getLogger().fine("[AntiCheat] Block break at " + block.getLocation() + " ignored for BREAK task (player placed)");
+        }
+
+        // 处理堆叠作物（竹子、甘蔗、仙人掌）的 HARVEST 任务
+        // 这些作物破坏底部时上方会连锁掉落，需要特殊处理
+        if (isStackableCrop(type)) {
+            handleStackableCropHarvest(player, block, type);
+        }
+
+        // 清除防刷记录（所有检测完成后）
+        plugin.getAntiCheatManager().removeBlockRecord(block.getLocation());
+    }
+
+    /**
+     * 检查是否是堆叠生长的作物
+     */
+    private boolean isStackableCrop(Material type) {
+        return type == Material.BAMBOO || type == Material.SUGAR_CANE || type == Material.CACTUS;
+    }
+
+    /**
+     * 处理堆叠作物的 HARVEST 任务
+     * 向上扫描相同类型的方块，计算总数量（排除玩家放置的）
+     */
+    private void handleStackableCropHarvest(Player player, Block block, Material type) {
+        int totalCount = 0;
+        Block current = block;
+
+        // 向上扫描相同类型的方块
+        while (current.getType() == type) {
+            Location loc = current.getLocation();
+            boolean isPlayerPlaced = plugin.getAntiCheatManager().isPlayerPlacedBlock(loc);
+
+            if (!isPlayerPlaced) {
+                totalCount++;
+            }
+
+            // 清除防刷记录
+            plugin.getAntiCheatManager().removeBlockRecord(loc);
+
+            // 向上检查
+            current = current.getRelative(0, 1, 0);
+        }
+
+        if (totalCount > 0) {
+            // 堆叠作物掉落物与方块类型相同
+            String itemKey = "minecraft:" + type.name().toLowerCase();
+            taskManager.updateProgress(player, TaskType.HARVEST, itemKey, null, totalCount);
+        }
+    }
+
+    /**
+     * 保存方块信息供后续事件使用
+     */
+    private void saveBlockBreakInfo(Player player, Block block, boolean isPlayerPlaced) {
+        BlockState state = block.getState();
+        String key = getBlockKey(player.getUniqueId(), block.getLocation());
+        brokenBlockInfo.put(key, new BlockBreakInfo(state, isPlayerPlaced));
+    }
+
+    private String getBlockKey(UUID playerUuid, Location location) {
+        return playerUuid.toString() + "@" + location.getWorld().getName() + ":" + location.getBlockX() + "," + location.getBlockY() + "," + location.getBlockZ();
+    }
+
+    private BlockBreakInfo getBlockBreakInfo(Player player, Location location) {
+        String key = getBlockKey(player.getUniqueId(), location);
+        BlockBreakInfo info = brokenBlockInfo.getIfPresent(key);
+        if (info != null) {
+            brokenBlockInfo.invalidate(key); // 获取后移除
+        }
+        return info;
+    }
+
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    public void onBlockDropItem(BlockDropItemEvent event) {
+        Player player = event.getPlayer();
+        if (player == null) return;
+
+        Block block = event.getBlock();
+        Location loc = block.getLocation();
+
+        // 获取保存的方块信息（BlockBreakEvent中保存的）
+        BlockBreakInfo info = getBlockBreakInfo(player, loc);
+        if (info == null) return;
+
+        BlockState state = info.state();
+        boolean wasPlayerPlaced = info.isPlayerPlaced();
+        Material type = state.getType();
+
+        // 1. 检查是否是 HARVEST 目标作物
+        if (!isHarvestableCrop(type)) return;
+
+        // 堆叠作物（竹子、甘蔗、仙人掌）已在 BlockBreakEvent 中处理
+        if (isStackableCrop(type)) return;
+
+        // 2. 检查是否成熟（使用BlockState中的数据）
+        if (!isFullyGrown(state)) return;
+
+        // 3. 南瓜、西瓜需要防刷检测（可被精准采集放置）
+        if ((type == Material.PUMPKIN || type == Material.MELON) && wasPlayerPlaced) {
+            plugin.getLogger().fine("[AntiCheat] Harvest at " + loc + " ignored (player placed pumpkin/melon)");
+            return;
+        }
+
+        // 4. 处理掉落物，按实际掉落物匹配任务
+        for (org.bukkit.entity.Item drop : event.getItems()) {
+            ItemStack itemStack = drop.getItemStack();
+            String itemKey = ItemUtil.getItemKey(itemStack);
+            if (itemKey == null) {
+                itemKey = "minecraft:" + itemStack.getType().name().toLowerCase();
+            }
+            int amount = itemStack.getAmount();
+
+            taskManager.updateProgress(player, TaskType.HARVEST, itemKey, itemStack, amount);
+        }
+    }
+
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    public void onPlayerHarvestBlock(PlayerHarvestBlockEvent event) {
+        Player player = event.getPlayer();
+        Block block = event.getHarvestedBlock();
+        Material type = block.getType();
+
+        // 只处理浆果类作物
+        if (type != Material.SWEET_BERRY_BUSH && type != Material.CAVE_VINES) return;
+
+        // 处理掉落物
+        for (ItemStack itemStack : event.getItemsHarvested()) {
+            String itemKey = ItemUtil.getItemKey(itemStack);
+            if (itemKey == null) {
+                itemKey = "minecraft:" + itemStack.getType().name().toLowerCase();
+            }
+            int amount = itemStack.getAmount();
+
+            taskManager.updateProgress(player, TaskType.HARVEST, itemKey, itemStack, amount);
         }
     }
 
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
     public void onBlockPlace(BlockPlaceEvent event) {
         // 记录玩家放置的方块，用于防刷检测
-        plugin.getAntiCheatManager().recordBlockPlace(event.getBlock().getLocation());
+        Location loc = event.getBlock().getLocation();
+        plugin.getAntiCheatManager().recordBlockPlace(loc);
     }
 
     private boolean isHarvestableCrop(Block block) {
-        Material type = block.getType();
+        return isHarvestableCrop(block.getType());
+    }
+
+    private boolean isHarvestableCrop(Material type) {
         return switch (type) {
             // 带 Ageable 的作物
             case WHEAT, CARROTS, POTATOES, BEETROOTS, NETHER_WART, COCOA -> true;
             // 成熟果实方块（无 Ageable，出现时即为成熟）
             case PUMPKIN, MELON -> true;
-            // 其他可收获植物
-            case SUGAR_CANE, CACTUS -> true;  // 竹子和甘蔗类
-            case BAMBOO -> true;  // 竹子（成熟后可以被收获）
-            case SWEET_BERRY_BUSH -> true;  // 甜浆果丛
-            case CAVE_VINES -> true;  // 发光浆果
+            // 其他可收获植物（堆叠作物在BlockBreakEvent中处理）
+            case SUGAR_CANE, CACTUS -> true;  // 甘蔗和仙人掌
+            case BAMBOO, BAMBOO_SAPLING -> true;  // 竹子（包括竹笋阶段）
+            // 注意：甜浆果丛(SWEET_BERRY_BUSH)和发光浆果(CAVE_VINES)由PlayerHarvestBlockEvent处理
             default -> false;
         };
     }
 
-    private boolean isFullyGrown(Block block) {
-        Material type = block.getType();
+    private boolean isFullyGrown(BlockState state) {
+        Material type = state.getType();
 
         // 无 Ageable 的成熟果实方块，出现时即为成熟
         if (type == Material.PUMPKIN || type == Material.MELON ||
@@ -198,24 +368,16 @@ public class TaskListener implements Listener {
             return true;
         }
 
-        // 发光浆果 - 判断是否有浆果
-        if (type == Material.CAVE_VINES) {
-            if (block.getBlockData() instanceof org.bukkit.block.data.type.CaveVines caveVines) {
-                return caveVines.isBerries();
-            }
+        // 竹笋（BAMBOO_SAPLING）未成熟，不能计入 HARVEST
+        if (type == Material.BAMBOO_SAPLING) {
             return false;
         }
 
-        // 甜浆果丛 - Ageable，最大年龄为 3
-        if (type == Material.SWEET_BERRY_BUSH) {
-            if (block.getBlockData() instanceof Ageable ageable) {
-                return ageable.getAge() >= 2; // 2 或 3 都有浆果
-            }
-            return false;
-        }
+        // 注意：甜浆果丛(SWEET_BERRY_BUSH)和发光浆果(CAVE_VINES)由PlayerHarvestBlockEvent处理
+        // 不需要在这里检查成熟度
 
-        // 标准 Ageable 作物
-        if (block.getBlockData() instanceof Ageable ageable) {
+        // 标准 Ageable 作物（小麦、胡萝卜、土豆等）
+        if (state.getBlockData() instanceof Ageable ageable) {
             return ageable.getAge() == ageable.getMaximumAge();
         }
 
