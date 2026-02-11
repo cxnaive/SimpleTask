@@ -4,6 +4,7 @@ import dev.user.simpletask.SimpleTaskPlugin;
 import dev.user.simpletask.task.TaskManager;
 import dev.user.simpletask.task.TaskType;
 import dev.user.simpletask.util.ItemUtil;
+import org.bukkit.GameMode;
 import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.block.Block;
@@ -23,10 +24,12 @@ import org.bukkit.event.player.PlayerHarvestBlockEvent;
 import org.bukkit.event.inventory.CraftItemEvent;
 import org.bukkit.event.inventory.SmithItemEvent;
 import org.bukkit.event.player.PlayerFishEvent;
+import org.bukkit.event.player.PlayerInteractEvent;
 import org.bukkit.event.player.PlayerItemConsumeEvent;
 import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.event.player.AsyncPlayerChatEvent;
+import org.bukkit.event.block.Action;
 import org.bukkit.event.entity.EntityDeathEvent;
 import org.bukkit.event.entity.EntityBreedEvent;
 import org.bukkit.inventory.ItemStack;
@@ -178,6 +181,59 @@ public class TaskListener implements Listener {
 
         // updateProgress handles its own async database operations
         taskManager.updateProgress(player, TaskType.CONSUME, finalItemKey, finalItem, 1);
+    }
+
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    public void onPlayerInteract(PlayerInteractEvent event) {
+        // 只处理右键点击方块
+        if (event.getAction() != Action.RIGHT_CLICK_BLOCK) return;
+        if (event.getClickedBlock() == null) return;
+
+        Block block = event.getClickedBlock();
+        Material type = block.getType();
+
+        // 检查是否是蛋糕
+        if (!isCake(type)) return;
+
+        Player player = event.getPlayer();
+
+        // 检查玩家是否可以食用蛋糕
+        if (!canEatCake(player)) return;
+
+        // 获取蛋糕的 item key
+        String itemKey = ItemUtil.getBlockKey(block);
+        if (itemKey == null) {
+            itemKey = "minecraft:" + type.name().toLowerCase();
+        }
+
+        // 更新 CONSUME 任务进度
+        taskManager.updateProgress(player, TaskType.CONSUME, itemKey, null, 1);
+    }
+
+    /**
+     * 检查是否是蛋糕（支持所有蛋糕类型）
+     */
+    private boolean isCake(Material type) {
+        return type == Material.CAKE ||
+               type.name().endsWith("_CAKE");  // 覆盖蜡烛蛋糕等变种
+    }
+
+    /**
+     * 检查玩家是否可以食用蛋糕
+     */
+    private boolean canEatCake(Player player) {
+        // 创造模式总是可以"吃"（不会减少饥饿值，但会触发动作）
+        if (player.getGameMode() == GameMode.CREATIVE) return true;
+
+        // 检查饥饿值是否已满（20点满）
+        if (player.getFoodLevel() >= 20) return false;
+
+        // 检查是否潜行并手持方块（此时会尝试放置方块而不是吃蛋糕）
+        if (player.isSneaking() && player.getInventory().getItemInMainHand().getType().isBlock()) {
+            return false;
+        }
+
+        return true;
     }
 
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
