@@ -264,17 +264,18 @@ public class TaskManager {
             String updateResetSql;
             if (isMySQL) {
                 updateResetSql = """
-                    INSERT INTO player_task_reset (player_uuid, last_reset_date, reset_server)
-                    VALUES (?, ?, ?)
+                    INSERT INTO player_task_reset (player_uuid, last_reset_date, reset_server, reroll_count)
+                    VALUES (?, ?, ?, 0)
                     ON DUPLICATE KEY UPDATE
                     last_reset_date = VALUES(last_reset_date),
-                    reset_server = VALUES(reset_server)
+                    reset_server = VALUES(reset_server),
+                    reroll_count = VALUES(reroll_count)
                     """;
             } else {
                 updateResetSql = """
-                    MERGE INTO player_task_reset (player_uuid, last_reset_date, reset_server)
+                    MERGE INTO player_task_reset (player_uuid, last_reset_date, reset_server, reroll_count)
                     KEY(player_uuid)
-                    VALUES (?, ?, ?)
+                    VALUES (?, ?, ?, 0)
                     """;
             }
             try (PreparedStatement ps = conn.prepareStatement(updateResetSql)) {
@@ -1174,5 +1175,64 @@ public class TaskManager {
             }
             return null;
         }, null, e -> plugin.getLogger().log(Level.WARNING, "Failed to cleanup player expired tasks", e));
+    }
+
+    /**
+     * 重置玩家今日刷新次数
+     * @param player 目标玩家
+     * @param callback 回调函数
+     */
+    public void resetPlayerRerollCount(Player player, java.util.function.Consumer<Boolean> callback) {
+        UUID uuid = player.getUniqueId();
+        LocalDate today = TimeUtil.getToday();
+
+        databaseQueue.submit("resetPlayerRerollCount", (conn) -> {
+            String updateSql;
+            if (isH2Database()) {
+                updateSql = "MERGE INTO player_task_reset (player_uuid, last_reset_date, reroll_count) KEY(player_uuid) VALUES (?, ?, 0)";
+            } else {
+                updateSql = "INSERT INTO player_task_reset (player_uuid, last_reset_date, reroll_count) VALUES (?, ?, 0) " +
+                        "ON DUPLICATE KEY UPDATE reroll_count = 0";
+            }
+
+            try (PreparedStatement ps = conn.prepareStatement(updateSql)) {
+                ps.setString(1, uuid.toString());
+                ps.setDate(2, java.sql.Date.valueOf(today));
+                ps.executeUpdate();
+            }
+            return true;
+        }, callback, e -> {
+            plugin.getLogger().log(Level.SEVERE, "Failed to reset reroll count for player: " + player.getName(), e);
+            callback.accept(false);
+        });
+    }
+
+    /**
+     * 重置所有在线玩家的今日刷新次数
+     * @param callback 回调函数
+     */
+    public void resetAllPlayerRerollCount(java.util.function.Consumer<Boolean> callback) {
+        List<Player> players = new ArrayList<>(Bukkit.getOnlinePlayers());
+        if (players.isEmpty()) {
+            callback.accept(true);
+            return;
+        }
+
+        AtomicInteger successCount = new AtomicInteger(0);
+        AtomicInteger completedCount = new AtomicInteger(0);
+        int total = players.size();
+
+        for (Player player : players) {
+            resetPlayerRerollCount(player, success -> {
+                if (success) {
+                    successCount.incrementAndGet();
+                }
+                completedCount.incrementAndGet();
+
+                if (completedCount.get() == total) {
+                    callback.accept(successCount.get() == total);
+                }
+            });
+        }
     }
 }
