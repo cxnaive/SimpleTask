@@ -1,10 +1,12 @@
 package dev.user.simpletask.task.manager;
 
 import dev.user.simpletask.SimpleTaskPlugin;
+import dev.user.simpletask.task.ExpirePolicy;
 import dev.user.simpletask.task.PlayerTask;
 import dev.user.simpletask.task.TaskTemplate;
 import dev.user.simpletask.task.TemplateSyncManager;
 import dev.user.simpletask.task.category.TaskCategory;
+import dev.user.simpletask.util.ExpireUtil;
 import dev.user.simpletask.util.MessageUtil;
 import dev.user.simpletask.util.TimeUtil;
 import dev.user.simpletask.util.TimeZoneConfig;
@@ -107,10 +109,18 @@ public class TaskExpireManager {
         int newGeneratedCount = 0;
 
         if (currentCount < maxCount) {
-            int needToGenerate = maxCount - currentCount;
-            List<PlayerTask> newTasks = taskGenerator.generateTasksForCategory(conn, player, category, needToGenerate, tasks);
-            tasks.addAll(newTasks);
-            newGeneratedCount = newTasks.size();
+            // FIXED 策略：只有在有效期内才生成新任务
+            boolean canGenerate = true;
+            if (category.getExpirePolicy() == ExpirePolicy.FIXED) {
+                canGenerate = ExpireUtil.isInFixedPeriod(category.getExpirePolicyConfig());
+            }
+
+            if (canGenerate) {
+                int needToGenerate = maxCount - currentCount;
+                List<PlayerTask> newTasks = taskGenerator.generateTasksForCategory(conn, player, category, needToGenerate, tasks);
+                tasks.addAll(newTasks);
+                newGeneratedCount = newTasks.size();
+            }
         }
 
         boolean hasRefreshed = expiredCount > 0 || newGeneratedCount > 0;
