@@ -122,14 +122,12 @@ public class ExpireUtil {
      * 固定时间任务过期判断
      *
      * 逻辑：当前时间超过 fixedEnd 即过期
+     * 支持本地时间格式和 ISO-8601 格式
      */
     public static boolean isFixedExpired(LocalDateTime now, String fixedStart, String fixedEnd) {
-        // FIXED策略：检查当前时间是否超过 fixedEnd
-        // 时间字符串应该是ISO-8601格式（如 2024-01-01T00:00:00Z）
-        // 统一使用配置时区进行比较
         if (fixedEnd != null && !fixedEnd.isEmpty()) {
             try {
-                Instant end = Instant.parse(fixedEnd);
+                Instant end = parseFixedTime(fixedEnd);
                 Instant nowInstant = TimeZoneConfig.toInstant(now);
                 return nowInstant.isAfter(end);
             } catch (Exception e) {
@@ -245,7 +243,7 @@ public class ExpireUtil {
             case FIXED -> {
                 if (category.getFixedEnd() != null) {
                     try {
-                        yield Instant.parse(category.getFixedEnd());
+                        yield parseFixedTime(category.getFixedEnd());
                     } catch (Exception e) {
                         yield null;
                     }
@@ -362,6 +360,7 @@ public class ExpireUtil {
     /**
      * 检查 FIXED 策略是否在有效期内
      * 统一使用配置时区进行判断
+     * 支持 ISO-8601 格式（带Z后缀）和本地时间格式（不带时区）
      */
     public static boolean isInFixedPeriod(ExpirePolicyConfig config) {
         String fixedStart = config.getFixedStart();
@@ -374,12 +373,33 @@ public class ExpireUtil {
         try {
             // 使用配置时区获取当前时间
             Instant now = TimeZoneConfig.toInstant(TimeZoneConfig.now());
-            Instant start = Instant.parse(fixedStart);
-            Instant end = Instant.parse(fixedEnd);
+            Instant start = parseFixedTime(fixedStart);
+            Instant end = parseFixedTime(fixedEnd);
 
             return !now.isBefore(start) && !now.isAfter(end);
         } catch (Exception e) {
             return true; // 解析失败，默认有效
         }
+    }
+
+    /**
+     * 解析固定时间字符串
+     * 支持两种格式：
+     * - ISO-8601 格式（带Z后缀）：直接解析为 Instant
+     * - 本地时间格式（不带时区）：使用配置时区解析后转为 Instant
+     */
+    private static Instant parseFixedTime(String timeStr) {
+        if (timeStr == null || timeStr.isEmpty()) {
+            throw new IllegalArgumentException("Time string is null or empty");
+        }
+
+        // 如果以 Z 结尾，按 UTC 时间解析
+        if (timeStr.endsWith("Z")) {
+            return Instant.parse(timeStr);
+        }
+
+        // 否则按本地时间解析，使用配置时区转为 Instant
+        LocalDateTime localDateTime = LocalDateTime.parse(timeStr);
+        return TimeZoneConfig.toInstant(localDateTime);
     }
 }
