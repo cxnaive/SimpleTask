@@ -6,6 +6,9 @@ import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import com.google.gson.reflect.TypeToken;
 
+import dev.user.simpletask.util.ItemUtil;
+import org.bukkit.inventory.ItemStack;
+
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
@@ -30,6 +33,9 @@ public class TaskTemplate {
     private final Reward reward;
     private boolean enabled = true;
 
+    // Task category (default: daily)
+    private String category = "daily";
+
     // Database ID (set after loading from database)
     private int id = -1;
 
@@ -41,9 +47,6 @@ public class TaskTemplate {
 
     // NBT matching conditions (optional)
     private List<String> nbtMatchConditions = new ArrayList<>();
-
-    // Block state conditions for BREAK/HARVEST tasks (optional)
-    private List<String> blockStateConditions = new ArrayList<>();
 
     public TaskTemplate(String taskKey, String name, TaskType type, String targetItem, int targetAmount,
                         String description, String icon, int weight, Reward reward) {
@@ -118,6 +121,14 @@ public class TaskTemplate {
         this.enabled = enabled;
     }
 
+    public String getCategory() {
+        return category;
+    }
+
+    public void setCategory(String category) {
+        this.category = category != null && !category.isEmpty() ? category : "daily";
+    }
+
     public int getId() {
         return id;
     }
@@ -131,12 +142,22 @@ public class TaskTemplate {
     }
 
     public boolean matchesTarget(String itemKey) {
+        return matchesTarget(itemKey, null);
+    }
+
+    /**
+     * 检查目标是否匹配（支持 NBT 条件）
+     * @param itemKey 物品 key
+     * @param item 物品实例（用于 NBT 匹配，可为 null）
+     * @return 是否匹配
+     */
+    public boolean matchesTarget(String itemKey, ItemStack item) {
         if (targetItems == null || targetItems.isEmpty()) {
             return true; // No specific target required
         }
         // 遍历所有目标ID，任一匹配即可
         for (String targetItem : targetItems) {
-            if (matchesSingleTarget(targetItem, itemKey)) {
+            if (matchesSingleTarget(targetItem, itemKey, item)) {
                 return true;
             }
         }
@@ -144,26 +165,50 @@ public class TaskTemplate {
     }
 
     /**
-     * 检查单个目标是否匹配
+     * 检查单个目标是否匹配（带物品信息）
      */
-    private boolean matchesSingleTarget(String targetItem, String itemKey) {
+    private boolean matchesSingleTarget(String targetItem, String itemKey, ItemStack item) {
+        // 基础 ID 匹配
+        boolean baseMatch = false;
+
         if (targetItem == null || targetItem.isEmpty()) {
+            baseMatch = true;
+        } else if (targetItem.equalsIgnoreCase(itemKey)) {
+            baseMatch = true;
+        } else if (type == TaskType.HARVEST || type == TaskType.BREAK) {
+            baseMatch = matchesBlockOrItem(targetItem, itemKey);
+        } else if (type == TaskType.CHAT) {
+            baseMatch = matchesChatMessage(targetItem, itemKey);
+        }
+
+        if (!baseMatch) {
+            return false;
+        }
+
+        // NBT 条件匹配
+        if (hasNbtMatchConditions() && item != null) {
+            if (!matchesNbtConditions(item)) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    /**
+     * 检查物品是否满足 NBT 匹配条件
+     */
+    private boolean matchesNbtConditions(ItemStack item) {
+        if (nbtMatchConditions == null || nbtMatchConditions.isEmpty()) {
             return true;
         }
-        // 精确匹配
-        if (targetItem.equalsIgnoreCase(itemKey)) {
-            return true;
+        // 使用 ItemUtil 检查 NBT
+        for (String nbtCondition : nbtMatchConditions) {
+            if (!ItemUtil.matchesNbtCondition(item, nbtCondition)) {
+                return false;
+            }
         }
-        // HARVEST/BREAK 类型任务：支持方块ID和物品ID的灵活匹配
-        // 例如: minecraft:carrot <-> minecraft:carrots
-        if (type == TaskType.HARVEST || type == TaskType.BREAK) {
-            return matchesBlockOrItem(targetItem, itemKey);
-        }
-        // CHAT 类型：消息包含目标关键词（不区分大小写）
-        if (type == TaskType.CHAT) {
-            return matchesChatMessage(targetItem, itemKey);
-        }
-        return false;
+        return true;
     }
 
     /**
@@ -301,7 +346,7 @@ public class TaskTemplate {
         return extensions.get(key);
     }
 
-    // ========== NBT and Block State Conditions ==========
+    // ========== NBT Conditions ==========
 
     /**
      * 获取NBT匹配条件列表
@@ -318,31 +363,10 @@ public class TaskTemplate {
     }
 
     /**
-     * 获取方块状态匹配条件列表
-     */
-    public List<String> getBlockStateConditions() {
-        return new ArrayList<>(blockStateConditions);
-    }
-
-    /**
-     * 设置方块状态匹配条件列表
-     */
-    public void setBlockStateConditions(List<String> blockStateConditions) {
-        this.blockStateConditions = blockStateConditions != null ? new ArrayList<>(blockStateConditions) : new ArrayList<>();
-    }
-
-    /**
      * 检查是否有NBT匹配条件
      */
     public boolean hasNbtMatchConditions() {
         return nbtMatchConditions != null && !nbtMatchConditions.isEmpty();
-    }
-
-    /**
-     * 检查是否有方块状态匹配条件
-     */
-    public boolean hasBlockStateConditions() {
-        return blockStateConditions != null && !blockStateConditions.isEmpty();
     }
 
     // ========== JSON Serialization ==========
@@ -355,6 +379,7 @@ public class TaskTemplate {
         json.addProperty("taskKey", taskKey);
         json.addProperty("name", name);
         json.addProperty("type", type.name());
+        json.addProperty("category", category);
         json.add("targetItems", GSON.toJsonTree(targetItems));
         json.addProperty("targetAmount", targetAmount);
         json.addProperty("description", description);
@@ -367,9 +392,6 @@ public class TaskTemplate {
         }
         if (!nbtMatchConditions.isEmpty()) {
             json.add("nbtMatchConditions", GSON.toJsonTree(nbtMatchConditions));
-        }
-        if (!blockStateConditions.isEmpty()) {
-            json.add("blockStateConditions", GSON.toJsonTree(blockStateConditions));
         }
         return GSON.toJson(json);
     }
@@ -406,6 +428,11 @@ public class TaskTemplate {
         TaskTemplate template = new TaskTemplate(taskKey, name, type, targetItems, targetAmount,
                 description, icon, weight, reward);
 
+        // Load category if present
+        if (json.has("category") && !json.get("category").isJsonNull()) {
+            template.setCategory(json.get("category").getAsString());
+        }
+
         if (json.has("version")) {
             template.setVersion(json.get("version").getAsInt());
         }
@@ -421,12 +448,6 @@ public class TaskTemplate {
         if (json.has("nbtMatchConditions") && !json.get("nbtMatchConditions").isJsonNull()) {
             List<String> nbtConditions = GSON.fromJson(json.get("nbtMatchConditions"), new TypeToken<List<String>>() {}.getType());
             template.setNbtMatchConditions(nbtConditions);
-        }
-
-        // Load block state conditions if present
-        if (json.has("blockStateConditions") && !json.get("blockStateConditions").isJsonNull()) {
-            List<String> blockStateConditions = GSON.fromJson(json.get("blockStateConditions"), new TypeToken<List<String>>() {}.getType());
-            template.setBlockStateConditions(blockStateConditions);
         }
 
         return template;

@@ -6,6 +6,9 @@ folia-supported: true
 author: user
 description: A simple daily task system for Folia/Paper servers
 
+depend:
+  - NBTAPI
+
 softdepend:
   - XConomy
   - CraftEngine
@@ -13,7 +16,7 @@ softdepend:
 commands:
   task:
     description: Open the daily task GUI
-    usage: /task
+    usage: /task [category]
     aliases: [dailytask, dt]
   taskadmin:
     description: Admin commands for SimpleTask

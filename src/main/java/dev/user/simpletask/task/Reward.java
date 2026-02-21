@@ -2,6 +2,8 @@ package dev.user.simpletask.task;
 
 import dev.user.simpletask.SimpleTaskPlugin;
 import dev.user.simpletask.util.ItemUtil;
+import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer;
 import org.bukkit.Bukkit;
 import org.bukkit.entity.Player;
 import org.bukkit.inventory.ItemStack;
@@ -92,21 +94,44 @@ public class Reward {
         }
     }
 
-    public String getDisplayString(SimpleTaskPlugin plugin) {
-        StringBuilder sb = new StringBuilder();
+    /**
+     * 获取奖励的显示Component（现代API）
+     */
+    public Component getDisplayComponent(SimpleTaskPlugin plugin) {
+        Component result = Component.empty();
+        boolean first = true;
 
         if (money > 0) {
-            sb.append(money).append(" 金币");
+            result = result.append(Component.text(money + " 金币"));
+            first = false;
         }
 
         for (RewardItem item : items) {
-            if (sb.length() > 0) sb.append(", ");
+            if (!first) {
+                result = result.append(Component.text(", "));
+            }
+            first = false;
+
             ItemStack stack = ItemUtil.createItem(plugin, item.getItemKey(), 1);
-            String name = stack != null ? ItemUtil.getDisplayName(stack) : item.getItemKey();
-            sb.append(item.getAmount()).append("x ").append(name);
+            Component name = stack != null
+                ? ItemUtil.getDisplayNameComponent(stack)
+                : Component.text(item.getItemKey());
+
+            result = result.append(Component.text(item.getAmount() + "x "))
+                          .append(name);
         }
 
-        return sb.toString();
+        return result;
+    }
+
+    /**
+     * 获取奖励的显示字符串（向后兼容）
+     * @deprecated 使用 getDisplayComponent() 获取 Component
+     */
+    @Deprecated
+    public String getDisplayString(SimpleTaskPlugin plugin) {
+        return LegacyComponentSerializer.legacySection()
+            .serialize(getDisplayComponent(plugin));
     }
 
     // JSON 序列化支持

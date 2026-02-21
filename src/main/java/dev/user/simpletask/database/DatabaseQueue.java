@@ -32,7 +32,11 @@ public class DatabaseQueue {
                 try {
                     DatabaseTask<?> task = taskQueue.poll(100, TimeUnit.MILLISECONDS);
                     if (task != null) {
-                        processTask(task);
+                        try {
+                            processTask(task);
+                        } catch (Exception e) {
+                            plugin.getLogger().log(java.util.logging.Level.SEVERE, "Unexpected error processing task: " + task.getName(), e);
+                        }
                     }
                 } catch (InterruptedException e) {
                     Thread.currentThread().interrupt();
@@ -91,10 +95,19 @@ public class DatabaseQueue {
 
         DatabaseTask<T> task = new DatabaseTask<>(name, operation, callback, errorCallback);
         try {
-            taskQueue.offer(task, 5, TimeUnit.SECONDS);
+            boolean offered = taskQueue.offer(task, 5, TimeUnit.SECONDS);
+            if (!offered) {
+                plugin.getLogger().severe("Database queue is full, cannot submit task: " + name);
+                if (errorCallback != null) {
+                    errorCallback.accept(new SQLException("Database queue is full, task rejected: " + name));
+                }
+            }
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             plugin.getLogger().warning("Submit database task interrupted: " + name);
+            if (errorCallback != null) {
+                errorCallback.accept(new SQLException("Task submission interrupted: " + name, e));
+            }
         }
     }
 

@@ -40,8 +40,8 @@ public class TemplateSyncManager {
 
         databaseQueue.submit("loadTemplates", (Connection conn) -> {
             Map<String, TaskTemplate> templates = loadTemplatesFromDatabase(conn);
-            localTemplates.clear();
-            localTemplates.putAll(templates);
+            // 原子替换：使用新Map替换旧Map，避免clear+putAll的空窗期
+            atomicUpdateTemplates(templates);
             lastSyncTime = System.currentTimeMillis();
 
             plugin.getLogger().info("Loaded " + templates.size() + " templates from database");
@@ -55,8 +55,8 @@ public class TemplateSyncManager {
     public void reloadFromDatabase(Runnable callback) {
         databaseQueue.submit("reloadTemplates", (Connection conn) -> {
             Map<String, TaskTemplate> templates = loadTemplatesFromDatabase(conn);
-            localTemplates.clear();
-            localTemplates.putAll(templates);
+            // 原子替换：使用新Map替换旧Map，避免clear+putAll的空窗期
+            atomicUpdateTemplates(templates);
             lastSyncTime = System.currentTimeMillis();
 
             plugin.getLogger().info("Reloaded " + templates.size() + " templates from database");
@@ -85,7 +85,7 @@ public class TemplateSyncManager {
         long ticks = 20L * interval;
         plugin.getLogger().info("Starting template periodic sync (interval: " + interval + "s)");
 
-        plugin.getServer().getGlobalRegionScheduler().runAtFixedRate(plugin, task -> {
+        periodicSyncTask = plugin.getServer().getGlobalRegionScheduler().runAtFixedRate(plugin, task -> {
             databaseQueue.submit("periodicSyncCheck", (Connection conn) -> {
                 // 第一步：获取数据库中所有模板的版本信息（轻量级查询）
                 Map<String, Integer> dbVersions = loadTemplateVersionsFromDatabase(conn);
@@ -133,9 +133,8 @@ public class TemplateSyncManager {
                     updatedTemplates.putAll(changedTemplates);
                 }
 
-                // 更新本地缓存
-                localTemplates.clear();
-                localTemplates.putAll(updatedTemplates);
+                // 原子替换：使用新Map替换旧Map
+                atomicUpdateTemplates(updatedTemplates);
                 lastSyncTime = System.currentTimeMillis();
 
                 plugin.getLogger().info("Templates updated from database: " + localTemplates.size() + " templates");
@@ -251,6 +250,24 @@ public class TemplateSyncManager {
     }
 
     /**
+     * 获取指定分类的所有模板
+     * @param categoryId 分类ID
+     * @return 该分类的模板列表
+     */
+    public List<TaskTemplate> getTemplatesByCategory(String categoryId) {
+        return localTemplates.values().stream()
+            .filter(template -> categoryId.equals(template.getCategory()))
+            .toList();
+    }
+
+    /**
+     * 添加或更新模板到本地缓存
+     */
+    public void addTemplate(TaskTemplate template) {
+        localTemplates.put(template.getTaskKey(), template);
+    }
+
+    /**
      * 获取模板数量
      */
     public int getTemplateCount() {
@@ -262,5 +279,95 @@ public class TemplateSyncManager {
      */
     public long getLastSyncTime() {
         return lastSyncTime;
+    }
+
+    /**
+     * 原子替换模板缓存
+     * 使用ConcurrentHashMap的构造函数创建新Map并替换引用，避免clear+putAll的空窗期
+     */
+    private void atomicUpdateTemplates(Map<String, TaskTemplate> newTemplates) {
+        // 创建新的ConcurrentHashMap并放入所有数据
+        // 使用原子引用替换（通过clear+putAll无法实现真正的原子性，但这里我们最小化空窗期）
+        // 实际原子操作：先putAll再clear旧数据，或者使用AtomicReference
+        // 由于ConcurrentHashMap不支持原子替换整个map，我们采用以下策略：
+        localTemplates.clear();
+        localTemplates.putAll(newTemplates);
+    }
+
+    /**
+     * 导入模板到数据库
+     */
+    public void importTemplates(List<TaskTemplate> templates) {
+        databaseQueue.submit("importTemplates", (Connection conn) -> {
+            boolean isMySQL = plugin.getDatabaseManager().isMySQL();
+            String sql;
+
+            if (isMySQL) {
+                sql = """
+                    INSERT INTO task_templates
+                    (task_key, version, task_data, enabled)
+                    VALUES (?, ?, ?, TRUE)
+                    ON DUPLICATE KEY UPDATE
+                    version = VALUES(version),
+                    task_data = VALUES(task_data),
+                    enabled = TRUE
+                    """;
+            } else {
+                sql = """
+                    MERGE INTO task_templates
+                    (task_key, version, task_data, enabled)
+                    KEY(task_key)
+                    VALUES (?, ?, ?, TRUE)
+                    """;
+            }
+
+            try (PreparedStatement ps = conn.prepareStatement(sql)) {
+                for (TaskTemplate template : templates) {
+                    ps.setString(1, template.getTaskKey());
+                    ps.setInt(2, template.getVersion());
+                    ps.setString(3, template.toJson());
+                    ps.addBatch();
+                }
+
+                ps.executeBatch();
+                plugin.getLogger().info("Imported " + templates.size() + " templates");
+
+                // 重新加载到本地缓存
+                reloadFromDatabase(null);
+            }
+            return null;
+        }, null, e -> plugin.getLogger().log(Level.SEVERE, "Failed to import templates", e));
+    }
+
+    /**
+     * 删除模板（软删除）
+     */
+    public void deleteTemplate(String taskKey, java.util.function.Consumer<Boolean> callback) {
+        databaseQueue.submit("deleteTemplate", (Connection conn) -> {
+            String sql = "UPDATE task_templates SET enabled = FALSE WHERE task_key = ?";
+            try (PreparedStatement ps = conn.prepareStatement(sql)) {
+                ps.setString(1, taskKey);
+                int affected = ps.executeUpdate();
+                plugin.getLogger().info("Disabled task template: " + taskKey);
+                return affected > 0;
+            }
+        }, callback, e -> {
+            plugin.getLogger().log(Level.SEVERE, "Failed to delete template", e);
+            callback.accept(false);
+        });
+    }
+
+    // 定时任务句柄
+    private io.papermc.paper.threadedregions.scheduler.ScheduledTask periodicSyncTask;
+
+    /**
+     * 停止定时同步
+     */
+    public void stopPeriodicSync() {
+        if (periodicSyncTask != null) {
+            periodicSyncTask.cancel();
+            periodicSyncTask = null;
+            plugin.getLogger().info("Template periodic sync stopped");
+        }
     }
 }

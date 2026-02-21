@@ -109,12 +109,12 @@ public class ItemUtil {
     }
 
     /**
-     * 获取物品的显示名称
+     * 获取物品的显示名称（返回Component，使用现代API）
      * 优先级：1. 自定义名称（如果有） 2. CE物品的translationKey 3. 原版翻译键
      */
-    public static String getDisplayName(ItemStack item) {
+    public static Component getDisplayNameComponent(ItemStack item) {
         if (item == null || item.getType() == Material.AIR) {
-            return "<lang:block.minecraft.air>空气</lang>";
+            return Component.translatable("block.minecraft.air");
         }
 
         ItemMeta meta = item.getItemMeta();
@@ -122,7 +122,7 @@ public class ItemUtil {
         if (meta != null && meta.hasCustomName()) {
             Component customName = meta.customName();
             if (customName != null) {
-                return LegacyComponentSerializer.legacySection().serialize(customName);
+                return customName;
             }
         }
 
@@ -130,7 +130,7 @@ public class ItemUtil {
         if (meta != null && meta.hasItemName()) {
             Component itemName = meta.itemName();
             if (itemName != null) {
-                return LegacyComponentSerializer.legacySection().serialize(itemName);
+                return itemName;
             }
         }
 
@@ -138,21 +138,17 @@ public class ItemUtil {
         if (ceAvailable) {
             String ceTranslationKey = getCEItemTranslationKey(item);
             if (ceTranslationKey != null) {
-                return "<lang:" + ceTranslationKey + ">";
+                return Component.translatable(ceTranslationKey);
             }
         }
 
-        // 最后返回原版 <lang> 标签格式
+        // 最后返回原版翻译键
         String matName = item.getType().name().toLowerCase();
-        String translationKey;
+        String translationKey = item.getType().isBlock()
+            ? "block.minecraft." + matName
+            : "item.minecraft." + matName;
 
-        if (item.getType().isBlock()) {
-            translationKey = "block.minecraft." + matName;
-        } else {
-            translationKey = "item.minecraft." + matName;
-        }
-
-        return "<lang:" + translationKey + ">";
+        return Component.translatable(translationKey);
     }
 
     /**
@@ -217,11 +213,20 @@ public class ItemUtil {
     }
 
     /**
-     * 创建一个简单的GUI装饰物品
+     * 创建GUI装饰物品（支持原版 + CE物品，使用MiniMessage格式名称）
+     *
+     * @param itemKey 物品key:
+     *                - "minecraft:stone" 或 "stone" → 原版石头
+     *                - "myce:custom_glass" → CE物品
+     * @param miniMessageName MiniMessage格式的名称
      */
-    public static ItemStack createDecoration(Material material, String name) {
-        ItemStack item = new ItemStack(material);
-        setDisplayName(item, name);
+    public static ItemStack createDecoration(String itemKey, String miniMessageName) {
+        ItemStack item = createItem(plugin, itemKey, 1);
+        ItemMeta meta = item.getItemMeta();
+        if (meta != null) {
+            meta.displayName(MessageUtil.guiName(miniMessageName));
+            item.setItemMeta(meta);
+        }
         return item;
     }
 

@@ -1,6 +1,11 @@
 # SimpleTask - 玩家每日任务系统配置
 # 注意: 任务模板已移至 tasks.yml
 
+# 时区设置
+# 可选值: "system" (系统默认), "utc" (UTC时间), 或具体时区如 "Asia/Shanghai"
+# 影响所有任务过期、刷新时间的计算
+timezone: "system"
+
 # 数据库设置
 database:
   # 数据库类型: h2 (本地文件) 或 mysql (跨服同步)
@@ -15,20 +20,159 @@ database:
   h2:
     filename: simpletask
 
-# 每日任务设置
-daily-tasks:
-  # 每日抽取任务数量
-  daily-count: 5
-  # 是否自动领取奖励 (true=自动发放, false=手动点击领取)
-  auto-claim: false
-  # 每日任务刷新设置
-  reroll:
-    # 每日刷新次数上限 (0=禁止刷新)
-    max-per-day: 3
-    # 每次刷新花费的金币 (0=免费)
-    cost: 100
-    # 是否保留已完成的任务 (true=只刷新未完成的任务, false=刷新所有任务)
-    keep-completed: true
+# 任务类别配置
+#
+# 说明：
+# - 可以自定义添加/删除类别，只需按照以下格式添加新的类别节点即可
+# - 系统默认使用 "daily" 类别，建议保留
+# - 类别ID只能包含字母、数字、下划线、连字符
+# - 删除类别前，请确保该类别下没有已分配的任务
+#
+# 预置类别：
+# - daily:    每日刷新任务（每天 04:00 重置）
+# - weekly:   每周刷新任务（每周一 04:00 重置）
+# - monthly:  每月刷新任务（每月1日 04:00 重置）
+# - limited:  限时任务（相对时间，如7天后过期）
+# - permanent: 永久任务（永不过期）
+#
+# 过期策略（expire-policy）：
+# - daily:    每日重置（需配合 reset.time）
+# - weekly:   每周重置（需配合 reset.day-of-week 和 reset.time）
+# - monthly:  每月重置（需配合 reset.day-of-month 和 reset.time）
+# - relative: 相对时间（从分配时开始计算，需配合 relative.default-duration）
+# - permanent: 永不过期
+# - fixed:    固定时间范围（需配合 fixed.start 和 fixed.end）
+#
+task-categories:
+
+  # ==================== 每日任务 ====================
+  daily:
+    id: "daily"
+    enabled: true
+    display:
+      name: "<gold><bold>每日任务"
+      lore:
+        - "<gray>每天更新的任务"
+        - "<gray>每日 <yellow>4:00 <gray>刷新"
+      item: "minecraft:clock"
+      slot: 0
+    assignment:
+      max-concurrent: 5
+      auto-assign: true
+      auto-claim: false       # 任务完成时自动领取奖励（false: 需手动点击领取）
+      expire-policy: "daily"
+      repeatable: true
+    reset:
+      time: "04:00"
+    reroll:
+      enabled: true
+      cost: 100.0
+      max-count: 3
+      reset-policy: "daily"      # 刷新次数重置策略: daily, weekly, monthly, relative
+      reset-time: "04:00"        # 重置时间
+
+  # ==================== 周常任务 ====================
+
+  # ==================== 周常任务 ====================
+  weekly:
+    id: "weekly"
+    enabled: true
+    display:
+      name: "<green><bold>周常任务"
+      lore:
+        - "<gray>每周更新的任务"
+        - "<gray>每周一 <yellow>4:00 <gray>刷新"
+      item: "minecraft:compass"
+      slot: 1
+    assignment:
+      max-concurrent: 3
+      auto-assign: true
+      expire-policy: "weekly"
+      repeatable: true
+    reset:
+      day-of-week: "MONDAY"
+      time: "04:00"
+    reroll:
+      enabled: true
+      cost: 200.0
+      max-count: 2
+      reset-policy: "weekly"      # 刷新次数重置策略
+      reset-time: "04:00"
+      reset-day-of-week: "MONDAY"
+
+  # ==================== 月度任务 ====================
+  monthly:
+    id: "monthly"
+    enabled: true
+    display:
+      name: "<blue><bold>月度任务"
+      lore:
+        - "<gray>每月更新的任务"
+        - "<gray>每月1日 <yellow>4:00 <gray>刷新"
+      item: "minecraft:emerald"
+      slot: 2
+    assignment:
+      max-concurrent: 2
+      auto-assign: true
+      expire-policy: "monthly"
+      repeatable: true
+    reset:
+      day-of-month: 1
+      time: "04:00"
+    reroll:
+      enabled: false
+      cost: 0.0
+      max-count: 0
+      reset-policy: "monthly"
+      reset-time: "04:00"
+      reset-day-of-month: 1
+
+  # ==================== 限时挑战 ====================
+  limited:
+    id: "limited"
+    enabled: true
+    display:
+      name: "<red><bold>限时挑战"
+      lore:
+        - "<gray>限时完成的任务"
+        - "<red>⚠ 过期后将消失！"
+      item: "minecraft:tnt"
+      slot: 3
+    assignment:
+      max-concurrent: 2
+      auto-assign: true
+      expire-policy: "relative"
+      repeatable: true
+    relative:
+      default-duration: "7d"
+      warning-before: "24h"
+    reroll:
+      enabled: true
+      cost: 50.0
+      max-count: 5
+      reset-policy: "relative"
+      reset-duration: "1d"         # 相对时间策略：每1天重置刷新次数
+
+  # ==================== 永久成就 ====================
+  permanent:
+    id: "permanent"
+    enabled: true
+    display:
+      name: "<dark_purple><bold>成就任务"
+      lore:
+        - "<gray>永久有效的成就"
+        - "<gray>完成后可获得奖励"
+      item: "minecraft:nether_star"
+      slot: 4
+    assignment:
+      max-concurrent: 10
+      auto-assign: true
+      expire-policy: "permanent"
+      repeatable: true
+    reroll:
+      enabled: false      # 永久任务不支持刷新
+      cost: 0.0
+      max-count: 0
 
 # 防刷任务设置
 anti-cheat:
@@ -53,10 +197,18 @@ data:
   # 设置为正数表示保留最近多少天的数据
   retention-days: 7
 
+# 在线玩家任务检查设置
+task-check:
+  # 检查间隔（分钟），定期为在线玩家检查任务是否过期并补充新任务
+  # 设置为0表示禁用自动检查（只在登录和打开GUI时检查）
+  # 建议值：5-10分钟
+  interval-minutes: 1
+
 # GUI界面设置
 gui:
   titles:
-    daily-tasks: "<dark_gray>每日任务"
+    daily-tasks: "<dark_gray>任务"
+    task-categories: "<gold><bold>任务系统"
     admin: "<dark_gray>任务管理"
   decoration:
     border:
@@ -78,20 +230,24 @@ gui:
     reward-items: "<gold>物品奖励: <yellow>{count} 种"
     status-completed: "<green>✓ 已领取奖励"
     status-claimable: "<yellow>点击领取奖励!"
+    status-in-progress: "<yellow>进行中"
+    status-not-started: "<gray>未开始"
     click-to-claim: "<yellow>点击领取奖励"
 
 # 命令帮助信息 (本地化)
 commands:
-  help-title: "<gold>===== 每日任务系统帮助 ====="
+  help-title: "<gold>===== 任务系统帮助 ====="
   help-player:
-    - "<yellow>/task <gray>- 打开每日任务界面"
+    - "<yellow>/task <gray>- 打开任务界面"
   help-admin:
     - "<yellow>/taskadmin <gray>- 打开管理界面"
-    - "<yellow>/taskadmin reload <gray>- 重载配置"
+    - "<yellow>/taskadmin reloadconfig <gray>- 重载配置"
     - "<yellow>/taskadmin import [all|任务key] <gray>- 导入任务模板"
     - "<yellow>/taskadmin list <gray>- 查看任务列表"
     - "<yellow>/taskadmin delete <任务key> <gray>- 禁用任务模板"
-    - "<yellow>/taskadmin reroll <玩家名/all> <gray>- 重新抽取每日任务"
+    - "<yellow>/taskadmin reroll <玩家名/all> <类别> <gray>- 重新抽取指定类别任务"
+    - "<yellow>/taskadmin rerollall <玩家名/all> <类别> <gray>- 强制刷新指定类别任务"
+    - "<yellow>/taskadmin resetreroll <玩家名/all> <类别> <gray>- 重置指定类别刷新次数"
     - "<yellow>/taskadmin help <gray>- 显示此帮助"
   unknown-command: "<red>未知命令，使用 <yellow>/taskadmin help <red>查看帮助"
   player-only: "<red>此命令只能由玩家执行"
@@ -112,8 +268,8 @@ admin:
   delete-fail-not-found: "<red>未找到任务模板: <yellow>{task_key}"
   no-permission: "<red>你没有权限执行此操作"
   # 重新抽取任务
-  reroll-success-player: "<green>已为玩家 <yellow>{player} <green>重新抽取每日任务"
-  reroll-success-all: "<green>已为所有在线玩家重新抽取每日任务 (<yellow>{count}<green>人)"
+  reroll-success-player: "<green>已为玩家 <yellow>{player} <green>重新抽取 <yellow>{category} <green>类别任务"
+  reroll-success-all: "<green>已为 <yellow>{count} <green>名玩家重新抽取 <yellow>{category} <green>类别任务"
   reroll-fail-player-not-found: "<red>找不到玩家: <yellow>{player}"
   reroll-fail-no-templates: "<red>没有可用的任务模板，无法抽取任务"
 
@@ -143,13 +299,15 @@ economy:
 
 # 消息设置 (支持MiniMessage格式)
 messages:
-  prefix: "<gold>[每日任务] <reset>"
+  prefix: "<gold>[任务系统] <reset>"
   no-permission: "<red>你没有权限执行此操作。"
   task-completed: "<green>恭喜！你完成了任务: <yellow>{task_name}"
+  task-completed-auto: "<green>恭喜！你完成了任务: <yellow>{task_name} <green>，奖励已自动发放: <yellow>{reward}"
   task-progress-milestone: "<gray>任务 <yellow>{task_name} <gray>进度: <yellow>{progress}/{target} <gray>({percent}%)"
   all-tasks-completed: "<green>恭喜！你已完成今日所有任务！"
   reward-claimed: "<green>已领取奖励: <yellow>{reward}"
   insufficient-space: "<red>背包空间不足，无法领取奖励！"
-  task-reset: "<yellow>每日任务已重置，请查收今日任务！"
+  task-reset: "<yellow>任务已重置，请查收新任务！"
   progress-update: "<gray>任务进度: <yellow>{current}/{target} <gray>({task_name})"
   task-assigned: "<yellow>管理员给你添加了新任务: <gold>{task_name}"
+  tasks-refreshed: "<green>你的 <yellow>{categories} <green>任务已刷新！"

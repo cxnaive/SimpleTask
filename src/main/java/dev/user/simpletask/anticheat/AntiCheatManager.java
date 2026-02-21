@@ -124,13 +124,10 @@ public class AntiCheatManager {
         long timeWindowMillis = timeWindowSeconds * 1000L;
         long currentTime = System.currentTimeMillis();
 
-        int removedCount = 0;
-        for (Map.Entry<String, Long> entry : playerPlacedBlocks.entrySet()) {
-            if (currentTime - entry.getValue() > timeWindowMillis) {
-                playerPlacedBlocks.remove(entry.getKey());
-                removedCount++;
-            }
-        }
+        // 使用 removeIf 原子清理过期条目，避免并发修改问题
+        int beforeSize = playerPlacedBlocks.size();
+        playerPlacedBlocks.entrySet().removeIf(entry -> currentTime - entry.getValue() > timeWindowMillis);
+        int removedCount = beforeSize - playerPlacedBlocks.size();
 
         if (removedCount > 0) {
             plugin.getLogger().fine("[AntiCheat] Cleaned up " + removedCount + " expired block records");

@@ -6,7 +6,7 @@ import dev.user.simpletask.util.ItemUtil;
 import dev.user.simpletask.util.MessageUtil;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
-import net.kyori.adventure.text.minimessage.MiniMessage;
+import net.kyori.adventure.text.format.TextDecoration;
 import org.bukkit.Material;
 import org.bukkit.entity.Player;
 import org.bukkit.event.inventory.ClickType;
@@ -33,8 +33,8 @@ public class AdminTaskGUI extends AbstractGUI {
         actions.clear();
 
         // Fill border
-        ItemStack borderItem = createDecoration(
-            Material.valueOf(plugin.getConfigManager().getGuiDecoration("border").replace("minecraft:", "").toUpperCase()),
+        ItemStack borderItem = ItemUtil.createDecoration(
+            plugin.getConfigManager().getGuiDecoration("border"),
             " "
         );
         fillBorder(borderItem);
@@ -54,7 +54,7 @@ public class AdminTaskGUI extends AbstractGUI {
         }
 
         // Fill empty slots
-        ItemStack emptyItem = createDecoration(Material.GRAY_STAINED_GLASS_PANE, " ");
+        ItemStack emptyItem = ItemUtil.createDecoration("minecraft:gray_stained_glass_pane", " ");
         for (int i = 0; i < slots.length; i++) {
             if (startIndex + i >= templates.size()) {
                 setItem(slots[i], emptyItem);
@@ -63,7 +63,7 @@ public class AdminTaskGUI extends AbstractGUI {
 
         // Navigation buttons
         if (page > 0) {
-            ItemStack prevButton = createDecoration(Material.ARROW, "<yellow><< 上一页");
+            ItemStack prevButton = ItemUtil.createDecoration("minecraft:arrow", "<yellow><< 上一页");
             setItem(45, prevButton, (p, e) -> {
                 page--;
                 initialize();
@@ -71,7 +71,7 @@ public class AdminTaskGUI extends AbstractGUI {
         }
 
         if (page < totalPages - 1) {
-            ItemStack nextButton = createDecoration(Material.ARROW, "<yellow>下一页 >>");
+            ItemStack nextButton = ItemUtil.createDecoration("minecraft:arrow", "<yellow>下一页 >>");
             setItem(53, nextButton, (p, e) -> {
                 page++;
                 initialize();
@@ -79,12 +79,12 @@ public class AdminTaskGUI extends AbstractGUI {
         }
 
         // Page indicator
-        ItemStack pageIndicator = createDecoration(Material.PAPER,
+        ItemStack pageIndicator = ItemUtil.createDecoration("minecraft:paper",
             "<yellow>第 " + (page + 1) + "/" + Math.max(1, totalPages) + " 页");
         setItem(49, pageIndicator);
 
         // Close button
-        ItemStack closeButton = createDecoration(Material.BARRIER, "<red>关闭");
+        ItemStack closeButton = ItemUtil.createDecoration("minecraft:barrier", "<red>关闭");
         setItem(50, closeButton, (p, e) -> p.closeInventory());
     }
 
@@ -108,44 +108,23 @@ public class AdminTaskGUI extends AbstractGUI {
         String name = "<yellow>" + template.getTaskKey();
         List<Component> lore = new ArrayList<>();
 
-        lore.add(net.kyori.adventure.text.minimessage.MiniMessage.miniMessage()
-            .deserialize("<gray>类型: <yellow>" + template.getType().getDisplayName())
-            .decoration(net.kyori.adventure.text.format.TextDecoration.ITALIC, false));
+        lore.add(MessageUtil.guiLore("<gray>类型: <yellow>" + template.getType().getDisplayName()));
 
         if (template.getTargetItem() != null) {
-            lore.add(net.kyori.adventure.text.minimessage.MiniMessage.miniMessage()
-                .deserialize("<gray>目标物品: <white>" + template.getTargetItem())
-                .decoration(net.kyori.adventure.text.format.TextDecoration.ITALIC, false));
+            lore.add(MessageUtil.guiLore("<gray>目标物品: <white>" + template.getTargetItem()));
         }
 
-        lore.add(net.kyori.adventure.text.minimessage.MiniMessage.miniMessage()
-            .deserialize("<gray>目标数量: <white>" + template.getTargetAmount())
-            .decoration(net.kyori.adventure.text.format.TextDecoration.ITALIC, false));
-
-        lore.add(net.kyori.adventure.text.minimessage.MiniMessage.miniMessage()
-            .deserialize("<gray>权重: <white>" + template.getWeight())
-            .decoration(net.kyori.adventure.text.format.TextDecoration.ITALIC, false));
-
+        lore.add(MessageUtil.guiLore("<gray>目标数量: <white>" + template.getTargetAmount()));
+        lore.add(MessageUtil.guiLore("<gray>权重: <white>" + template.getWeight()));
         lore.add(Component.empty());
-
-        // 解析描述中的MiniMessage并禁用斜体
-        lore.add(net.kyori.adventure.text.minimessage.MiniMessage.miniMessage()
-            .deserialize(template.getDescription())
-            .decoration(net.kyori.adventure.text.format.TextDecoration.ITALIC, false));
-
+        lore.add(MessageUtil.guiLore(template.getDescription()));
         lore.add(Component.empty());
-        lore.add(net.kyori.adventure.text.minimessage.MiniMessage.miniMessage()
-            .deserialize("<green>左键 - 编辑")
-            .decoration(net.kyori.adventure.text.format.TextDecoration.ITALIC, false));
-        lore.add(net.kyori.adventure.text.minimessage.MiniMessage.miniMessage()
-            .deserialize("<red>右键 - 删除")
-            .decoration(net.kyori.adventure.text.format.TextDecoration.ITALIC, false));
+        lore.add(MessageUtil.guiLore("<green>左键 - 编辑"));
+        lore.add(MessageUtil.guiLore("<red>右键 - 删除"));
 
         ItemMeta meta = item.getItemMeta();
         if (meta != null) {
-            meta.displayName(net.kyori.adventure.text.minimessage.MiniMessage.miniMessage()
-                .deserialize(name)
-                .decoration(net.kyori.adventure.text.format.TextDecoration.ITALIC, false));
+            meta.displayName(MessageUtil.guiName(name));
             meta.lore(lore);
             item.setItemMeta(meta);
         }
@@ -176,28 +155,19 @@ public class AdminTaskGUI extends AbstractGUI {
             // 异步执行删除，根据结果显示消息
             plugin.getTaskManager().deleteTemplate(taskKey, success -> {
                 if (success) {
-                    Map<String, String> placeholders = new HashMap<>();
-                    placeholders.put("task_key", taskKey);
-                    MessageUtil.sendMiniMessage(player,
-                        plugin.getConfigManager().getAdminMessage("delete-success", placeholders));
+                    MessageUtil.sendAdmin(plugin, player, "delete-success",
+                        dev.user.simpletask.util.MessageUtil.textPlaceholders("task_key", taskKey));
                 } else {
-                    MessageUtil.sendMiniMessage(player, "<red>删除任务失败");
+                    dev.user.simpletask.util.MessageUtil.send(plugin, player, "<red>删除任务失败");
                 }
             });
         } else if (clickType.isLeftClick()) {
             // 左键 - 编辑功能（暂时发送消息）
             Map<String, String> placeholders = new HashMap<>();
             placeholders.put("task_key", template.getTaskKey());
-            MessageUtil.sendMiniMessage(player,
-                "<yellow>正在编辑任务: <gold>{task_key} <gray>(功能开发中)");
+            dev.user.simpletask.util.MessageUtil.send(plugin, player, "<yellow>正在编辑任务: <gold>{task_key} <gray>(功能开发中)",
+                    dev.user.simpletask.util.MessageUtil.textPlaceholders("task_key", template.getTaskKey()));
             player.closeInventory();
         }
-    }
-
-    private ItemStack createDecoration(Material material, String name) {
-        // 先解析 MiniMessage，然后序列化为 legacy 格式供 ItemUtil 使用
-        Component component = MiniMessage.miniMessage().deserialize(name);
-        String legacyName = net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer.legacySection().serialize(component);
-        return ItemUtil.createDecoration(material, legacyName);
     }
 }

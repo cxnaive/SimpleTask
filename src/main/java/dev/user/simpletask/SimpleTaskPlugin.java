@@ -12,14 +12,16 @@ import dev.user.simpletask.gui.GUIManager;
 import dev.user.simpletask.listener.GUIListener;
 import dev.user.simpletask.listener.TaskListener;
 import dev.user.simpletask.task.TaskManager;
+import dev.user.simpletask.util.ExpireUtil;
 import dev.user.simpletask.util.ItemUtil;
+import dev.user.simpletask.util.TimeZoneConfig;
 import org.bukkit.plugin.java.JavaPlugin;
 
 import java.util.logging.Level;
 
 public class SimpleTaskPlugin extends JavaPlugin {
 
-    private static SimpleTaskPlugin instance;
+    private static volatile SimpleTaskPlugin instance;
 
     private ConfigManager configManager;
     private DatabaseManager databaseManager;
@@ -41,6 +43,9 @@ public class SimpleTaskPlugin extends JavaPlugin {
 
         // Initialize ItemUtil
         ItemUtil.init(this);
+
+        // Initialize TimeZoneConfig (统一时区管理)
+        TimeZoneConfig.initialize(this);
 
         // Initialize database
         try {
@@ -77,10 +82,23 @@ public class SimpleTaskPlugin extends JavaPlugin {
         getServer().getPluginManager().registerEvents(new TaskListener(this), this);
 
         // Register commands
-        getCommand("task").setExecutor(new SimpleTaskCommand(this));
+        SimpleTaskCommand simpleTaskCommand = new SimpleTaskCommand(this);
+        org.bukkit.command.PluginCommand taskCmd = getCommand("task");
+        if (taskCmd != null) {
+            taskCmd.setExecutor(simpleTaskCommand);
+            taskCmd.setTabCompleter(simpleTaskCommand);
+        } else {
+            getLogger().warning("Command 'task' not found in plugin.yml");
+        }
+
         AdminCommand adminCommand = new AdminCommand(this);
-        getCommand("taskadmin").setExecutor(adminCommand);
-        getCommand("taskadmin").setTabCompleter(adminCommand);
+        org.bukkit.command.PluginCommand taskAdminCmd = getCommand("taskadmin");
+        if (taskAdminCmd != null) {
+            taskAdminCmd.setExecutor(adminCommand);
+            taskAdminCmd.setTabCompleter(adminCommand);
+        } else {
+            getLogger().warning("Command 'taskadmin' not found in plugin.yml");
+        }
 
         // Initialize API
         TaskAPI.initialize(this);
@@ -90,12 +108,21 @@ public class SimpleTaskPlugin extends JavaPlugin {
 
     @Override
     public void onDisable() {
+        // 1. 先保存所有玩家任务数据（在数据库队列关闭前）
+        if (taskManager != null) {
+            taskManager.shutdown();
+        }
+
+        // 2. 关闭数据库队列
         if (databaseQueue != null) {
             databaseQueue.shutdown();
         }
+
+        // 3. 关闭数据库连接
         if (databaseManager != null) {
             databaseManager.close();
         }
+
         getLogger().info("SimpleTask has been disabled!");
     }
 

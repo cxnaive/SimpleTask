@@ -11,9 +11,7 @@ import org.bukkit.command.TabCompleter;
 import org.bukkit.entity.Player;
 
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -28,13 +26,12 @@ public class AdminCommand implements CommandExecutor, TabCompleter {
     @Override
     public boolean onCommand(CommandSender sender, Command command, String label, String[] args) {
         if (!sender.hasPermission("simpletask.admin")) {
-            MessageUtil.sendConfigMessage(plugin, sender, "no-permission");
+            MessageUtil.sendConfig(plugin, sender, "no-permission");
             return true;
         }
 
         if (args.length == 0) {
             if (sender instanceof Player player) {
-                // Open admin GUI
                 plugin.getServer().getGlobalRegionScheduler().execute(plugin, () -> {
                     AdminTaskGUI gui = new AdminTaskGUI(plugin, player);
                     gui.open();
@@ -48,7 +45,7 @@ public class AdminCommand implements CommandExecutor, TabCompleter {
         switch (args[0].toLowerCase()) {
             case "reloadconfig" -> {
                 plugin.getConfigManager().reload();
-                MessageUtil.sendMiniMessage(sender, plugin.getConfigManager().getAdminMessage("config-reloaded"));
+                MessageUtil.sendAdmin(plugin, sender, "config-reloaded");
                 return true;
             }
             case "reloadfromdb" -> {
@@ -65,42 +62,42 @@ public class AdminCommand implements CommandExecutor, TabCompleter {
             }
             case "delete" -> {
                 if (args.length < 2) {
-                    MessageUtil.sendMiniMessage(sender, plugin.getConfigManager().getCommandMessage("player-only"));
+                    MessageUtil.sendCommand(plugin, sender, "player-only");
                     return true;
                 }
                 deleteTemplate(sender, args[1]);
                 return true;
             }
             case "reroll" -> {
-                if (args.length < 2) {
-                    MessageUtil.sendMiniMessage(sender, "\u003cred\u003e用法: /taskadmin reroll \u003c玩家名/all\u003e");
+                if (args.length < 3) {
+                    MessageUtil.send(plugin, sender, "<red>用法: /taskadmin reroll <分类> <玩家名/all>");
                     return true;
                 }
-                rerollTasks(sender, args[1]);
+                rerollTasks(sender, args[1], args[2]);
                 return true;
             }
             case "rerollall" -> {
-                if (args.length < 2) {
-                    MessageUtil.sendMiniMessage(sender, "<red>用法: /taskadmin rerollall <玩家名/all>");
+                if (args.length < 3) {
+                    MessageUtil.send(plugin, sender, "<red>用法: /taskadmin rerollall <分类> <玩家名/all>");
                     return true;
                 }
-                rerollAllTasks(sender, args[1]);
+                rerollAllTasks(sender, args[1], args[2]);
                 return true;
             }
             case "assign" -> {
-                if (args.length < 3) {
-                    MessageUtil.sendMiniMessage(sender, "\u003cred\u003e用法: /taskadmin assign \u003c任务key\u003e \u003c玩家名/all\u003e");
+                if (args.length < 4) {
+                    MessageUtil.send(plugin, sender, "<red>用法: /taskadmin assign <分类> <任务key> <玩家名/all>");
                     return true;
                 }
-                assignTask(sender, args[1], args[2]);
+                assignTask(sender, args[1], args[2], args[3]);
                 return true;
             }
             case "resetreroll" -> {
-                if (args.length < 2) {
-                    MessageUtil.sendMiniMessage(sender, "<red>用法: /taskadmin resetreroll <玩家名/all>");
+                if (args.length < 3) {
+                    MessageUtil.send(plugin, sender, "<red>用法: /taskadmin resetreroll <分类> <玩家名/all>");
                     return true;
                 }
-                resetRerollCount(sender, args[1]);
+                resetRerollCount(sender, args[1], args[2]);
                 return true;
             }
             case "help" -> {
@@ -108,7 +105,7 @@ public class AdminCommand implements CommandExecutor, TabCompleter {
                 return true;
             }
             default -> {
-                MessageUtil.sendMiniMessage(sender, plugin.getConfigManager().getCommandMessage("unknown-command"));
+                MessageUtil.sendCommand(plugin, sender, "unknown-command");
                 return true;
             }
         }
@@ -120,11 +117,10 @@ public class AdminCommand implements CommandExecutor, TabCompleter {
         List<TaskTemplate> templates = plugin.getConfigManager().loadTemplatesFromConfig(taskKey);
         if (templates.isEmpty()) {
             if (!taskKey.equalsIgnoreCase("all")) {
-                Map<String, String> placeholders = new HashMap<>();
-                placeholders.put("task_key", taskKey);
-                MessageUtil.sendMiniMessage(sender, plugin.getConfigManager().getAdminMessage("import-fail-not-found", placeholders));
+                MessageUtil.sendAdmin(plugin, sender, "import-fail-not-found",
+                    MessageUtil.textPlaceholders("task_key", taskKey));
             } else {
-                MessageUtil.sendMiniMessage(sender, plugin.getConfigManager().getAdminMessage("import-fail"));
+                MessageUtil.sendAdmin(plugin, sender, "import-fail");
             }
             return;
         }
@@ -132,13 +128,11 @@ public class AdminCommand implements CommandExecutor, TabCompleter {
         plugin.getTaskManager().importTemplates(templates);
 
         if (taskKey.equalsIgnoreCase("all")) {
-            Map<String, String> placeholders = new HashMap<>();
-            placeholders.put("count", String.valueOf(templates.size()));
-            MessageUtil.sendMiniMessage(sender, plugin.getConfigManager().getAdminMessage("import-success-all", placeholders));
+            MessageUtil.sendAdmin(plugin, sender, "import-success-all",
+                MessageUtil.textPlaceholders("count", String.valueOf(templates.size())));
         } else {
-            Map<String, String> placeholders = new HashMap<>();
-            placeholders.put("task_key", taskKey);
-            MessageUtil.sendMiniMessage(sender, plugin.getConfigManager().getAdminMessage("import-success-single", placeholders));
+            MessageUtil.sendAdmin(plugin, sender, "import-success-single",
+                MessageUtil.textPlaceholders("task_key", taskKey));
         }
     }
 
@@ -151,38 +145,39 @@ public class AdminCommand implements CommandExecutor, TabCompleter {
         }
 
         if (args.length == 1) {
-            // 第一级子命令
             String[] subCommands = {"reloadconfig", "reloadfromdb", "import", "list", "delete", "reroll", "rerollall", "assign", "resetreroll", "help"};
             for (String sub : subCommands) {
                 if (sub.toLowerCase().startsWith(args[0].toLowerCase())) {
                     completions.add(sub);
                 }
             }
-        } else if (args.length == 2 && args[0].equalsIgnoreCase("assign")) {
-            // assign 命令的补全 - 数据库中的模板
+        } else if (args.length == 2 && (args[0].equalsIgnoreCase("reroll") || args[0].equalsIgnoreCase("rerollall") || args[0].equalsIgnoreCase("assign") || args[0].equalsIgnoreCase("resetreroll"))) {
+            // 分类补全
+            completions.addAll(plugin.getConfigManager().getTaskCategories().keySet());
+        } else if (args.length == 3 && args[0].equalsIgnoreCase("assign")) {
+            // assign 命令的任务key补全
             for (TaskTemplate template : plugin.getTaskManager().getAllTemplates()) {
-                if (template.getTaskKey().toLowerCase().startsWith(args[1].toLowerCase())) {
+                if (template.getTaskKey().toLowerCase().startsWith(args[2].toLowerCase())) {
                     completions.add(template.getTaskKey());
                 }
             }
-        } else if (args.length == 3 && args[0].equalsIgnoreCase("assign")) {
-            // assign 命令的第三个参数 - 在线玩家名 + all
+        } else if (args.length == 3 && (args[0].equalsIgnoreCase("reroll") || args[0].equalsIgnoreCase("rerollall") || args[0].equalsIgnoreCase("resetreroll"))) {
+            // 玩家名/all 补全
             completions.add("all");
             for (Player player : plugin.getServer().getOnlinePlayers()) {
                 if (player.getName().toLowerCase().startsWith(args[2].toLowerCase())) {
                     completions.add(player.getName());
                 }
             }
-        } else if (args.length == 2 && (args[0].equalsIgnoreCase("reroll") || args[0].equalsIgnoreCase("rerollall") || args[0].equalsIgnoreCase("resetreroll"))) {
-            // reroll 和 rerollall 命令的补全 - 在线玩家名 + all
+        } else if (args.length == 4 && args[0].equalsIgnoreCase("assign")) {
+            // assign 命令的玩家名补全
             completions.add("all");
             for (Player player : plugin.getServer().getOnlinePlayers()) {
-                if (player.getName().toLowerCase().startsWith(args[1].toLowerCase())) {
+                if (player.getName().toLowerCase().startsWith(args[3].toLowerCase())) {
                     completions.add(player.getName());
                 }
             }
         } else if (args.length == 2 && args[0].equalsIgnoreCase("import")) {
-            // import 命令的补全 - 所有任务key
             Set<String> keys = plugin.getConfigManager().getTaskKeysFromConfig();
             for (String key : keys) {
                 if (key.toLowerCase().startsWith(args[1].toLowerCase())) {
@@ -191,7 +186,6 @@ public class AdminCommand implements CommandExecutor, TabCompleter {
             }
             completions.add("all");
         } else if (args.length == 2 && args[0].equalsIgnoreCase("delete")) {
-            // delete 命令的补全 - 数据库中的模板
             for (TaskTemplate template : plugin.getTaskManager().getAllTemplates()) {
                 if (template.getTaskKey().toLowerCase().startsWith(args[1].toLowerCase())) {
                     completions.add(template.getTaskKey());
@@ -206,149 +200,149 @@ public class AdminCommand implements CommandExecutor, TabCompleter {
         Set<String> configKeys = plugin.getConfigManager().getTaskKeysFromConfig();
         List<TaskTemplate> dbTemplates = List.copyOf(plugin.getTaskManager().getAllTemplates());
 
-        MessageUtil.sendMiniMessage(sender, plugin.getConfigManager().getAdminMessage("list-title-config"));
+        MessageUtil.sendAdmin(plugin, sender, "list-title-config");
         for (String key : configKeys) {
             boolean inDb = dbTemplates.stream().anyMatch(t -> t.getTaskKey().equals(key));
             String status = inDb ? plugin.getConfigManager().getAdminMessage("list-status-imported")
                                   : plugin.getConfigManager().getAdminMessage("list-status-not-imported");
-            Map<String, String> placeholders = new HashMap<>();
-            placeholders.put("key", key);
-            placeholders.put("status", status);
-            MessageUtil.sendMiniMessage(sender, "<yellow>{key} <gray>{status}", placeholders);
+            MessageUtil.send(plugin, sender, "<yellow>{key} <gray>{status}",
+                MessageUtil.textPlaceholders("key", key, "status", status));
         }
 
-        MessageUtil.sendMiniMessage(sender, "");
-        MessageUtil.sendMiniMessage(sender, plugin.getConfigManager().getAdminMessage("list-title-database"));
+        MessageUtil.send(plugin, sender, "");
+        MessageUtil.sendAdmin(plugin, sender, "list-title-database");
         for (TaskTemplate template : dbTemplates) {
-            Map<String, String> placeholders = new HashMap<>();
-            placeholders.put("key", template.getTaskKey());
-            placeholders.put("type", plugin.getConfigManager().getTaskTypeName(template.getType()));
-            placeholders.put("weight", String.valueOf(template.getWeight()));
-            MessageUtil.sendMiniMessage(sender, plugin.getConfigManager().getAdminMessage("list-template-info", placeholders));
+            MessageUtil.send(plugin, sender,
+                "<yellow>{key} <gray>({type}) 权重:{weight}",
+                MessageUtil.textPlaceholders(
+                    "key", template.getTaskKey(),
+                    "type", plugin.getConfigManager().getTaskTypeName(template.getType()),
+                    "weight", String.valueOf(template.getWeight())
+                ));
         }
     }
 
     private void deleteTemplate(CommandSender sender, String taskKey) {
         TaskTemplate template = plugin.getTaskManager().getTemplateByKey(taskKey);
         if (template == null) {
-            Map<String, String> placeholders = new HashMap<>();
-            placeholders.put("task_key", taskKey);
-            MessageUtil.sendMiniMessage(sender, plugin.getConfigManager().getAdminMessage("delete-fail-not-found", placeholders));
+            MessageUtil.sendAdmin(plugin, sender, "delete-fail-not-found",
+                MessageUtil.textPlaceholders("task_key", taskKey));
             return;
         }
 
-        // 使用回调获取实际执行结果
         plugin.getTaskManager().deleteTemplate(taskKey, success -> {
             if (success) {
-                Map<String, String> placeholders = new HashMap<>();
-                placeholders.put("task_key", taskKey);
-                MessageUtil.sendMiniMessage(sender, plugin.getConfigManager().getAdminMessage("delete-success", placeholders));
+                MessageUtil.sendAdmin(plugin, sender, "delete-success",
+                    MessageUtil.textPlaceholders("task_key", taskKey));
             } else {
-                MessageUtil.sendMiniMessage(sender, "<red>删除任务失败，请检查数据库连接");
+                MessageUtil.send(plugin, sender, "<red>删除任务失败，请检查数据库连接");
             }
         });
     }
 
-    private void rerollAllTasks(CommandSender sender, String target) {
+    private void rerollAllTasks(CommandSender sender, String categoryId, String target) {
         if (target.equalsIgnoreCase("all")) {
-            // 强制刷新所有在线玩家的所有任务
             int count = plugin.getServer().getOnlinePlayers().size();
             if (count == 0) {
-                MessageUtil.sendMiniMessage(sender, "<red>当前没有在线玩家");
+                MessageUtil.send(plugin, sender, "<red>当前没有在线玩家");
                 return;
             }
 
-            plugin.getTaskManager().forceRerollAllPlayerTasks(true, success -> {
+            plugin.getTaskManager().forceRerollAllPlayerCategoryTasks(categoryId, true, success -> {
                 if (success) {
-                    Map<String, String> placeholders = new HashMap<>();
-                    placeholders.put("count", String.valueOf(count));
-                    MessageUtil.sendMiniMessage(sender, "<green>已为所有在线玩家强制刷新所有任务 (<yellow>{count}<green>人)", placeholders);
+                    MessageUtil.send(plugin, sender, "<green>已为所有在线玩家强制刷新 <yellow>{category}<green> 分类的任务 (<yellow>{count}<green>人)",
+                        MessageUtil.textPlaceholders("category", categoryId, "count", String.valueOf(count)));
                 } else {
-                    MessageUtil.sendMiniMessage(sender, "<red>强制刷新任务失败，请检查数据库连接");
+                    MessageUtil.send(plugin, sender, "<red>强制刷新任务失败，请检查数据库连接");
                 }
             });
         } else {
-            // 强制刷新指定玩家的所有任务
             Player targetPlayer = plugin.getServer().getPlayerExact(target);
             if (targetPlayer == null || !targetPlayer.isOnline()) {
-                Map<String, String> placeholders = new HashMap<>();
-                placeholders.put("player", target);
-                MessageUtil.sendMiniMessage(sender, plugin.getConfigManager().getAdminMessage("reroll-fail-player-not-found", placeholders));
+                MessageUtil.send(plugin, sender, "<red>找不到玩家: <yellow>{player}",
+                    MessageUtil.textPlaceholders("player", target));
                 return;
             }
 
-            plugin.getTaskManager().forceRerollPlayerTasks(targetPlayer, true, success -> {
+            plugin.getTaskManager().forceRerollPlayerCategoryTasks(targetPlayer, categoryId, true, success -> {
                 if (success) {
-                    Map<String, String> placeholders = new HashMap<>();
-                    placeholders.put("player", targetPlayer.getName());
-                    MessageUtil.sendMiniMessage(sender, "<green>已为玩家 <yellow>{player} <green>强制刷新所有任务", placeholders);
+                    MessageUtil.send(plugin, sender, "<green>已为玩家 <yellow>{player} <green>强制刷新 <yellow>{category}<green> 分类的任务",
+                        MessageUtil.textPlaceholders("player", targetPlayer.getName(), "category", categoryId));
                 } else {
-                    Map<String, String> placeholders = new HashMap<>();
-                    placeholders.put("player", targetPlayer.getName());
-                    MessageUtil.sendMiniMessage(sender, "<red>强制刷新 {player} 的任务失败", placeholders);
+                    MessageUtil.send(plugin, sender, "<red>强制刷新 {player} 的任务失败",
+                        MessageUtil.textPlaceholders("player", targetPlayer.getName()));
                 }
             });
         }
     }
 
-    private void rerollTasks(CommandSender sender, String target) {
+    private void rerollTasks(CommandSender sender, String categoryId, String target) {
         if (target.equalsIgnoreCase("all")) {
-            // 重新抽取所有在线玩家
             int count = plugin.getServer().getOnlinePlayers().size();
             if (count == 0) {
-                MessageUtil.sendMiniMessage(sender, "\u003cred\u003e当前没有在线玩家");
+                MessageUtil.send(plugin, sender, "<red>当前没有在线玩家");
                 return;
             }
 
-            // 使用回调获取实际执行结果
-            plugin.getTaskManager().rerollAllPlayerTasks(true, success -> {
+            plugin.getTaskManager().rerollAllPlayerCategoryTasks(categoryId, true, success -> {
                 if (success) {
-                    Map<String, String> placeholders = new HashMap<>();
-                    placeholders.put("count", String.valueOf(count));
-                    MessageUtil.sendMiniMessage(sender, plugin.getConfigManager().getAdminMessage("reroll-success-all", placeholders));
+                    MessageUtil.send(plugin, sender, "<green>已为所有在线玩家重新抽取 <yellow>{category}<green> 分类的任务 (<yellow>{count}<green>人)",
+                        MessageUtil.textPlaceholders("category", categoryId, "count", String.valueOf(count)));
                 } else {
-                    MessageUtil.sendMiniMessage(sender, "<red>重新抽取任务失败，请检查数据库连接");
+                    MessageUtil.send(plugin, sender, "<red>重新抽取任务失败，请检查数据库连接");
                 }
             });
         } else {
-            // 重新抽取指定玩家
             Player targetPlayer = plugin.getServer().getPlayerExact(target);
             if (targetPlayer == null || !targetPlayer.isOnline()) {
-                Map<String, String> placeholders = new HashMap<>();
-                placeholders.put("player", target);
-                MessageUtil.sendMiniMessage(sender, plugin.getConfigManager().getAdminMessage("reroll-fail-player-not-found", placeholders));
+                MessageUtil.send(plugin, sender, "<red>找不到玩家: <yellow>{player}",
+                    MessageUtil.textPlaceholders("player", target));
                 return;
             }
 
-            // 使用回调获取实际执行结果
-            plugin.getTaskManager().rerollPlayerTasks(targetPlayer, true, success -> {
+            plugin.getTaskManager().rerollPlayerCategoryTasks(targetPlayer, categoryId, true, success -> {
                 if (success) {
-                    Map<String, String> placeholders = new HashMap<>();
-                    placeholders.put("player", targetPlayer.getName());
-                    MessageUtil.sendMiniMessage(sender, plugin.getConfigManager().getAdminMessage("reroll-success-player", placeholders));
+                    MessageUtil.send(plugin, sender, "<green>已为玩家 <yellow>{player} <green>重新抽取 <yellow>{category}<green> 分类的任务",
+                        MessageUtil.textPlaceholders("player", targetPlayer.getName(), "category", categoryId));
                 } else {
-                    Map<String, String> placeholders = new HashMap<>();
-                    placeholders.put("player", targetPlayer.getName());
-                    MessageUtil.sendMiniMessage(sender, "<red>重新抽取 {player} 的任务失败", placeholders);
+                    MessageUtil.send(plugin, sender, "<red>重新抽取 {player} 的任务失败",
+                        MessageUtil.textPlaceholders("player", targetPlayer.getName()));
                 }
             });
         }
     }
 
-    private void assignTask(CommandSender sender, String taskKey, String target) {
+    private void assignTask(CommandSender sender, String categoryId, String taskKey, String target) {
         TaskTemplate template = plugin.getTaskManager().getTemplateByKey(taskKey);
         if (template == null) {
-            Map<String, String> placeholders = new HashMap<>();
-            placeholders.put("task_key", taskKey);
-            MessageUtil.sendMiniMessage(sender, "\u003cred\u003e未找到任务模板: \u003cyellow\u003e{task_key}", placeholders);
+            MessageUtil.send(plugin, sender, "<red>未找到任务模板: <yellow>{task_key}",
+                MessageUtil.textPlaceholders("task_key", taskKey));
             return;
         }
 
+        // 检查分类是否存在
+        var category = plugin.getConfigManager().getTaskCategory(categoryId);
+        if (category == null) {
+            MessageUtil.send(plugin, sender, "<red>分类不存在: <yellow>{category}",
+                MessageUtil.textPlaceholders("category", categoryId));
+            return;
+        }
+
+        // 警告：模板类别与目标类别不一致
+        if (!categoryId.equals(template.getCategory())) {
+            plugin.getLogger().warning("[SimpleTask] Admin assigning template '" + taskKey +
+                "' (template category: " + template.getCategory() + ") to category: " + categoryId +
+                " (requested by: " + sender.getName() + ")");
+            MessageUtil.send(plugin, sender, "<yellow>警告: 任务模板 <gold>{task_key} <yellow>的类别是 <gold>{template_category}<yellow>，但将分配到 <gold>{target_category}",
+                MessageUtil.textPlaceholders("task_key", taskKey,
+                    "template_category", template.getCategory(),
+                    "target_category", categoryId));
+        }
+
         if (target.equalsIgnoreCase("all")) {
-            // 给所有在线玩家添加任务
             List<Player> players = new ArrayList<>(plugin.getServer().getOnlinePlayers());
             if (players.isEmpty()) {
-                MessageUtil.sendMiniMessage(sender, "\u003cred\u003e当前没有在线玩家");
+                MessageUtil.send(plugin, sender, "<red>当前没有在线玩家");
                 return;
             }
 
@@ -357,129 +351,112 @@ public class AdminCommand implements CommandExecutor, TabCompleter {
             int total = players.size();
 
             for (Player player : players) {
-                plugin.getTaskManager().assignTaskToPlayer(player, template, success -> {
+                plugin.getTaskManager().assignTaskToCategory(player, categoryId, template, success -> {
                     if (success) {
                         successCount.incrementAndGet();
                     }
                     completedCount.incrementAndGet();
 
                     if (completedCount.get() == total) {
-                        Map<String, String> placeholders = new HashMap<>();
-                        placeholders.put("task_key", taskKey);
-                        placeholders.put("count", String.valueOf(successCount.get()));
-                        MessageUtil.sendMiniMessage(sender, "\u003cgreen\u003e成功为 \u003cyellow\u003e{count} \u003cgreen\u003e名玩家添加任务: \u003cyellow\u003e{task_key}", placeholders);
+                        MessageUtil.send(plugin, sender, "<green>成功为 <yellow>{count} <green>名玩家添加任务: <yellow>{task_key}",
+                            MessageUtil.textPlaceholders("count", String.valueOf(successCount.get()), "task_key", taskKey));
                     }
                 });
             }
         } else {
-            // 给指定玩家添加任务
             Player targetPlayer = plugin.getServer().getPlayerExact(target);
             if (targetPlayer == null || !targetPlayer.isOnline()) {
-                Map<String, String> placeholders = new HashMap<>();
-                placeholders.put("player", target);
-                MessageUtil.sendMiniMessage(sender, "\u003cred\u003e找不到玩家: \u003cyellow\u003e{player}", placeholders);
+                MessageUtil.send(plugin, sender, "<red>找不到玩家: <yellow>{player}",
+                    MessageUtil.textPlaceholders("player", target));
                 return;
             }
 
-            plugin.getTaskManager().assignTaskToPlayer(targetPlayer, template, success -> {
+            plugin.getTaskManager().assignTaskToCategory(targetPlayer, categoryId, template, success -> {
                 if (success) {
-                    Map<String, String> placeholders = new HashMap<>();
-                    placeholders.put("player", targetPlayer.getName());
-                    placeholders.put("task_key", taskKey);
-                    MessageUtil.sendMiniMessage(sender, "\u003cgreen\u003e已为玩家 \u003cyellow\u003e{player} \u003cgreen\u003e添加任务: \u003cyellow\u003e{task_key}", placeholders);
+                    MessageUtil.send(plugin, sender, "<green>已为玩家 <yellow>{player} <green>添加任务: <yellow>{task_key}",
+                        MessageUtil.textPlaceholders("player", targetPlayer.getName(), "task_key", taskKey));
                 } else {
-                    Map<String, String> placeholders = new HashMap<>();
-                    placeholders.put("player", targetPlayer.getName());
-                    MessageUtil.sendMiniMessage(sender, "\u003cred\u003e为 {player} 添加任务失败", placeholders);
+                    MessageUtil.send(plugin, sender, "<red>为 {player} 添加任务失败",
+                        MessageUtil.textPlaceholders("player", targetPlayer.getName()));
                 }
             });
         }
     }
 
-    private void resetRerollCount(CommandSender sender, String target) {
+    private void resetRerollCount(CommandSender sender, String categoryId, String target) {
         if (target.equalsIgnoreCase("all")) {
-            // 重置所有在线玩家
             int count = plugin.getServer().getOnlinePlayers().size();
             if (count == 0) {
-                MessageUtil.sendMiniMessage(sender, "\u003cred\u003e当前没有在线玩家");
+                MessageUtil.send(plugin, sender, "<red>当前没有在线玩家");
                 return;
             }
 
-            plugin.getTaskManager().resetAllPlayerRerollCount(success -> {
+            plugin.getTaskManager().resetAllPlayerCategoryRerollCount(categoryId, success -> {
                 if (success) {
-                    Map<String, String> placeholders = new HashMap<>();
-                    placeholders.put("count", String.valueOf(count));
-                    MessageUtil.sendMiniMessage(sender, "\u003cgreen\u003e已重置所有在线玩家的刷新次数 (\u003cyellow\u003e{count}\u003cgreen\u003e人)", placeholders);
+                    MessageUtil.send(plugin, sender, "<green>已重置所有在线玩家 <yellow>{category}<green> 分类的刷新次数 (<yellow>{count}<green>人)",
+                        MessageUtil.textPlaceholders("category", categoryId, "count", String.valueOf(count)));
                 } else {
-                    MessageUtil.sendMiniMessage(sender, "\u003cred\u003e重置刷新次数失败，请检查数据库连接");
+                    MessageUtil.send(plugin, sender, "<red>重置刷新次数失败，请检查数据库连接");
                 }
             });
         } else {
-            // 重置指定玩家
             Player targetPlayer = plugin.getServer().getPlayerExact(target);
             if (targetPlayer == null || !targetPlayer.isOnline()) {
-                Map<String, String> placeholders = new HashMap<>();
-                placeholders.put("player", target);
-                MessageUtil.sendMiniMessage(sender, plugin.getConfigManager().getAdminMessage("reroll-fail-player-not-found", placeholders));
+                MessageUtil.send(plugin, sender, "<red>找不到玩家: <yellow>{player}",
+                    MessageUtil.textPlaceholders("player", target));
                 return;
             }
 
-            plugin.getTaskManager().resetPlayerRerollCount(targetPlayer, success -> {
+            plugin.getTaskManager().resetPlayerCategoryRerollCount(targetPlayer, categoryId, success -> {
                 if (success) {
-                    Map<String, String> placeholders = new HashMap<>();
-                    placeholders.put("player", targetPlayer.getName());
-                    MessageUtil.sendMiniMessage(sender, "\u003cgreen\u003e已重置玩家 \u003cyellow\u003e{player} \u003cgreen\u003e的刷新次数", placeholders);
+                    MessageUtil.send(plugin, sender, "<green>已重置玩家 <yellow>{player} <green>在 <yellow>{category}<green> 分类的刷新次数",
+                        MessageUtil.textPlaceholders("player", targetPlayer.getName(), "category", categoryId));
                 } else {
-                    Map<String, String> placeholders = new HashMap<>();
-                    placeholders.put("player", targetPlayer.getName());
-                    MessageUtil.sendMiniMessage(sender, "\u003cred\u003e重置 {player} 的刷新次数失败", placeholders);
+                    MessageUtil.send(plugin, sender, "<red>重置 {player} 的刷新次数失败",
+                        MessageUtil.textPlaceholders("player", targetPlayer.getName()));
                 }
             });
         }
     }
 
     private void reloadFromDatabase(CommandSender sender) {
-        MessageUtil.sendMiniMessage(sender, "\u003cyellow\u003e正在从数据库重新加载模板...");
+        MessageUtil.send(plugin, sender, "<yellow>正在从数据库重新加载模板...");
         plugin.getTaskManager().getTemplateSyncManager().reloadFromDatabase(() -> {
-            MessageUtil.sendMiniMessage(sender, "\u003cgreen\u003e模板已从数据库重新加载完成！");
+            MessageUtil.send(plugin, sender, "<green>模板已从数据库重新加载完成！");
         });
     }
 
     private void sendHelp(CommandSender sender) {
-        MessageUtil.sendMiniMessage(sender, plugin.getConfigManager().getCommandMessage("help-title"));
+        MessageUtil.send(plugin, sender, plugin.getConfigManager().getCommandMessage("help-title"));
 
         List<String> helpMessages;
         if (sender instanceof Player) {
-            // 玩家显示玩家和管理员命令
             helpMessages = plugin.getConfigManager().getCommandHelpMessages("player");
             for (String msg : helpMessages) {
-                MessageUtil.sendMiniMessage(sender, msg);
+                MessageUtil.send(plugin, sender, msg);
             }
-            MessageUtil.sendMiniMessage(sender, "");
+            MessageUtil.send(plugin, sender, "");
             helpMessages = plugin.getConfigManager().getCommandHelpMessages("admin");
             for (String msg : helpMessages) {
-                MessageUtil.sendMiniMessage(sender, msg);
+                MessageUtil.send(plugin, sender, msg);
             }
-            // 额外命令帮助
-            MessageUtil.sendMiniMessage(sender, "\u003cyellow\u003e/taskadmin reloadconfig \u003cgray\u003e- 重新加载配置文件");
-            MessageUtil.sendMiniMessage(sender, "\u003cyellow\u003e/taskadmin reloadfromdb \u003cgray\u003e- 从数据库重新加载模板");
-            MessageUtil.sendMiniMessage(sender, "\u003cyellow\u003e/taskadmin reroll \u003c玩家名/all\u003e \u003cgray\u003e- 重新抽取每日任务");
-            MessageUtil.sendMiniMessage(sender, "\u003cyellow\u003e/taskadmin rerollall \u003c玩家名/all\u003e \u003cgray\u003e- 强制刷新所有任务(无视完成状态)");
-            MessageUtil.sendMiniMessage(sender, "\u003cyellow\u003e/taskadmin assign \u003c任务key\u003e \u003c玩家名/all\u003e \u003cgray\u003e- 给玩家添加指定任务");
-            MessageUtil.sendMiniMessage(sender, "\u003cyellow\u003e/taskadmin resetreroll \u003c玩家名/all\u003e \u003cgray\u003e- 重置玩家今日刷新次数");
+            MessageUtil.send(plugin, sender, "<yellow>/taskadmin reloadconfig <gray>- 重新加载配置文件");
+            MessageUtil.send(plugin, sender, "<yellow>/taskadmin reloadfromdb <gray>- 从数据库重新加载模板");
+            MessageUtil.send(plugin, sender, "<yellow>/taskadmin reroll <分类> <玩家名/all> <gray>- 重新抽取任务(保留已完成)");
+            MessageUtil.send(plugin, sender, "<yellow>/taskadmin rerollall <分类> <玩家名/all> <gray>- 强制刷新所有任务");
+            MessageUtil.send(plugin, sender, "<yellow>/taskadmin assign <分类> <任务key> <玩家名/all> <gray>- 给玩家添加指定任务");
+            MessageUtil.send(plugin, sender, "<yellow>/taskadmin resetreroll <分类> <玩家名/all> <gray>- 重置玩家刷新次数");
         } else {
-            // 控制台只显示管理员命令
             helpMessages = plugin.getConfigManager().getCommandHelpMessages("admin");
             for (String msg : helpMessages) {
-                MessageUtil.sendMiniMessage(sender, msg);
+                MessageUtil.send(plugin, sender, msg);
             }
-            // 额外命令帮助
-            MessageUtil.sendMiniMessage(sender, "\u003cyellow\u003e/taskadmin reloadconfig \u003cgray\u003e- 重新加载配置文件");
-            MessageUtil.sendMiniMessage(sender, "\u003cyellow\u003e/taskadmin reloadfromdb \u003cgray\u003e- 从数据库重新加载模板");
-            MessageUtil.sendMiniMessage(sender, "\u003cyellow\u003e/taskadmin reroll \u003c玩家名/all\u003e \u003cgray\u003e- 重新抽取每日任务");
-            MessageUtil.sendMiniMessage(sender, "\u003cyellow\u003e/taskadmin rerollall \u003c玩家名/all\u003e \u003cgray\u003e- 强制刷新所有任务(无视完成状态)");
-            MessageUtil.sendMiniMessage(sender, "\u003cyellow\u003e/taskadmin assign \u003c任务key\u003e \u003c玩家名/all\u003e \u003cgray\u003e- 给玩家添加指定任务");
-            MessageUtil.sendMiniMessage(sender, "\u003cyellow\u003e/taskadmin resetreroll \u003c玩家名/all\u003e \u003cgray\u003e- 重置玩家今日刷新次数");
+            MessageUtil.send(plugin, sender, "<yellow>/taskadmin reloadconfig <gray>- 重新加载配置文件");
+            MessageUtil.send(plugin, sender, "<yellow>/taskadmin reloadfromdb <gray>- 从数据库重新加载模板");
+            MessageUtil.send(plugin, sender, "<yellow>/taskadmin reroll <分类> <玩家名/all> <gray>- 重新抽取任务");
+            MessageUtil.send(plugin, sender, "<yellow>/taskadmin rerollall <分类> <玩家名/all> <gray>- 强制刷新所有任务");
+            MessageUtil.send(plugin, sender, "<yellow>/taskadmin assign <分类> <任务key> <玩家名/all> <gray>- 给玩家添加指定任务");
+            MessageUtil.send(plugin, sender, "<yellow>/taskadmin resetreroll <分类> <玩家名/all> <gray>- 重置玩家刷新次数");
         }
     }
 }

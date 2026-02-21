@@ -12,10 +12,15 @@
 # - name: 任务显示名称（可选，默认为任务key）
 # - type: 任务类型
 # - version: 版本号（可选，默认为1）
+# - category: 任务类别（可选，默认为 daily）
+#         说明：可以自定义任意类别ID，只要在 config.yml 的 task-categories 中有对应配置即可
+#         预置类别: daily(每日), weekly(周常), monthly(月度), limited(限时), permanent(永久)
+#         自定义示例: festival(节日), event(活动), newbie(新手) 等
 # - target-item/target-items: 目标物品/关键词
 # - target-amount: 目标数量
 # - description: 任务描述
-# - icon: GUI图标（可选）
+# - icon: GUI图标（可选），支持原版物品和CE物品
+#         示例: "minecraft:diamond", "myce:custom_item"
 # - weight: 抽取权重
 # - reward: 奖励配置
 
@@ -28,8 +33,10 @@ chat_10:
   type: CHAT
   name: "每日发言"
   version: 1
+  category: "daily"
   target-amount: 10
   description: "<gray>在服务器发言 <yellow>10 <gray>次"
+  icon: "minecraft:writable_book"
   reward:
     money: 100.0
     items:
@@ -44,6 +51,7 @@ chat_50:
   version: 1
   target-amount: 50
   description: "<gray>在服务器发言 <yellow>50 <gray>次"
+  icon: "minecraft:book"
   reward:
     money: 300.0
     items:
@@ -59,6 +67,7 @@ chat_say_hello:
   target-item: "hello"  # 消息包含 hello 即可
   target-amount: 5
   description: "<gray>说 <yellow>5 <gray>次 hello"
+  icon: "minecraft:name_tag"
   reward:
     money: 150.0
     items:
@@ -80,6 +89,7 @@ chat_greeting:
     - "hi"
   target-amount: 10
   description: "<gray>向其他玩家打招呼 <yellow>10 <gray>次"
+  icon: "minecraft:emerald"
   reward:
     money: 200.0
     items:
@@ -99,6 +109,7 @@ chat_recruit:
     - "一起"
   target-amount: 5
   description: "<gold>发布招募信息 <yellow>5 <gray>次"
+  icon: "minecraft:diamond"
   reward:
     money: 300.0
     items:
@@ -114,6 +125,7 @@ craft_crafting_table:
   target-item: "minecraft:crafting_table"
   target-amount: 1
   description: "<gray>合成 <yellow>1 <gray>个工作台"
+  icon: "minecraft:crafting_table"
   reward:
     money: 50.0
     items:
@@ -128,6 +140,7 @@ craft_diamond_pickaxe:
   target-item: "minecraft:diamond_pickaxe"
   target-amount: 1
   description: "<gray>合成 <yellow>1 <gray>个钻石镐"
+  icon: "minecraft:diamond_pickaxe"
   reward:
     money: 500.0
     items:
@@ -150,6 +163,7 @@ craft_wooden_tools_10:
     - "minecraft:wooden_sword"
   target-amount: 10
   description: "<gray>合成 <yellow>10 <gray>个任意木质工具"
+  icon: "minecraft:wooden_pickaxe"
   reward:
     money: 200.0
     items:
@@ -170,6 +184,7 @@ craft_stone_tools_10:
     - "minecraft:stone_sword"
   target-amount: 10
   description: "<gray>合成 <yellow>10 <gray>个任意石质工具"
+  icon: "minecraft:stone_pickaxe"
   reward:
     money: 300.0
     items:
@@ -187,6 +202,7 @@ fish_any_5:
   version: 1
   target-amount: 5
   description: "<gray>钓起 <yellow>5 <gray>条鱼"
+  icon: "minecraft:fishing_rod"
   reward:
     money: 150.0
     items:
@@ -202,6 +218,7 @@ fish_cod_10:
   target-item: "minecraft:cod"
   target-amount: 10
   description: "<gray>钓起 <yellow>10 <gray>条鳕鱼"
+  icon: "minecraft:cod"
   reward:
     money: 200.0
     items:
@@ -217,6 +234,7 @@ fish_salmon_10:
   target-item: "minecraft:salmon"
   target-amount: 10
   description: "<gray>钓起 <yellow>10 <gray>条鲑鱼"
+  icon: "minecraft:salmon"
   reward:
     money: 220.0
     items:
@@ -236,6 +254,7 @@ fish_treasure_3:
     - "minecraft:enchanted_book"
   target-amount: 3
   description: "<gold>钓起 <yellow>3 <gold>个宝藏物品"
+  icon: "minecraft:saddle"
   reward:
     money: 500.0
     items:
@@ -245,13 +264,15 @@ fish_treasure_3:
         amount: 16
   weight: 15
 
-# 大量钓鱼任务
+# 大量钓鱼任务 - 周常
 fish_master_50:
   type: FISH
   name: "钓鱼大师"
   version: 1
+  category: "weekly"
   target-amount: 50
   description: "<gray>钓起 <yellow>50 <gray>条鱼 (大师级任务)"
+  icon: "minecraft:enchanted_book"
   reward:
     money: 1000.0
     items:
@@ -268,6 +289,7 @@ consume_food_10:
   version: 1
   target-amount: 10
   description: "<gray>消耗 <yellow>10 <gray>个食物"
+  icon: "minecraft:apple"
   reward:
     money: 100.0
     items:
@@ -282,6 +304,7 @@ consume_golden_apple:
   target-item: "minecraft:golden_apple"
   target-amount: 1
   description: "<gray>消耗 <yellow>1 <gray>个金苹果"
+  icon: "minecraft:golden_apple"
   reward:
     money: 300.0
     items:
@@ -297,6 +320,7 @@ break_stone_64:
   target-item: "minecraft:stone"
   target-amount: 64
   description: "<gray>挖掘 <yellow>64 <gray>个石头"
+  icon: "minecraft:iron_pickaxe"
   reward:
     money: 150.0
     items:
@@ -311,6 +335,7 @@ break_diamond_ore:
   target-item: "minecraft:diamond_ore"
   target-amount: 3
   description: "<gray>挖掘 <yellow>3 <gray>个钻石矿"
+  icon: "minecraft:diamond_pickaxe"
   reward:
     money: 600.0
     items:
@@ -329,6 +354,7 @@ harvest_wheat_32:
   target-item: "minecraft:wheat"  # 单ID配置（字符串形式）
   target-amount: 32
   description: "<gray>收获 <yellow>32 <gray>个小麦"
+  icon: "minecraft:wheat"
   reward:
     money: 120.0
     items:
@@ -343,6 +369,7 @@ harvest_carrot_64:
   target-item: "minecraft:carrot"  # 支持 carrot 或 carrots，都会匹配
   target-amount: 64
   description: "<gray>收获 <yellow>64 <gray>个胡萝卜"
+  icon: "minecraft:carrot"
   reward:
     money: 150.0
     items:
@@ -363,6 +390,7 @@ harvest_mixed_crops:
     - "customcrops:tomato"  # CE自定义作物
   target-amount: 20
   description: "<gray>收获任意作物 <yellow>20 <gray>个"
+  icon: "minecraft:wheat_seeds"
   reward:
     money: 200.0
     items:
@@ -378,6 +406,7 @@ harvest_pumpkin_10:
   target-item: "minecraft:pumpkin"  # 南瓜方块
   target-amount: 10
   description: "<gray>收获 <yellow>10 <gray>个南瓜"
+  icon: "minecraft:pumpkin"
   reward:
     money: 180.0
     items:
@@ -395,6 +424,7 @@ harvest_melon_20:
   target-item: "minecraft:melon"  # 西瓜方块
   target-amount: 20
   description: "<gray>收获 <yellow>20 <gray>个西瓜"
+  icon: "minecraft:melon"
   reward:
     money: 200.0
     items:
@@ -412,6 +442,7 @@ harvest_cocoa_32:
   target-item: "minecraft:cocoa_beans"  # 可可豆，配置用物品ID
   target-amount: 32
   description: "<gray>收获 <yellow>32 <gray>个可可豆"
+  icon: "minecraft:cocoa_beans"
   reward:
     money: 160.0
     items:
@@ -429,6 +460,7 @@ harvest_nether_wart_64:
   target-item: "minecraft:nether_wart"
   target-amount: 64
   description: "<gray>收获 <yellow>64 <gray>个下界疣"
+  icon: "minecraft:nether_wart"
   reward:
     money: 300.0
     items:
@@ -446,6 +478,7 @@ harvest_sugar_cane_128:
   target-item: "minecraft:sugar_cane"
   target-amount: 128
   description: "<gray>收获 <yellow>128 <gray>个甘蔗"
+  icon: "minecraft:sugar_cane"
   reward:
     money: 200.0
     items:
@@ -463,6 +496,7 @@ harvest_cactus_64:
   target-item: "minecraft:cactus"
   target-amount: 64
   description: "<gray>收获 <yellow>64 <gray>个仙人掌"
+  icon: "minecraft:cactus"
   reward:
     money: 180.0
     items:
@@ -478,6 +512,7 @@ harvest_bamboo_256:
   target-item: "minecraft:bamboo"
   target-amount: 256
   description: "<gray>收获 <yellow>256 <gray>个竹子"
+  icon: "minecraft:bamboo"
   reward:
     money: 220.0
     items:
@@ -493,6 +528,7 @@ harvest_sweet_berries_32:
   target-item: "minecraft:sweet_berries"
   target-amount: 32
   description: "<gray>收获 <yellow>32 <gray>个甜浆果"
+  icon: "minecraft:sweet_berries"
   reward:
     money: 120.0
     items:
@@ -508,6 +544,7 @@ harvest_glow_berries_16:
   target-item: "minecraft:glow_berries"
   target-amount: 16
   description: "<gray>收获 <yellow>16 <gray>个发光浆果"
+  icon: "minecraft:glow_berries"
   reward:
     money: 150.0
     items:
@@ -529,6 +566,7 @@ submit_oak_log_64:
   target-item: "minecraft:oak_log"
   target-amount: 64
   description: "<gray>提交 <yellow>64 <gray>个橡木原木"
+  icon: "minecraft:chest"
   reward:
     money: 300.0
     items:
@@ -552,6 +590,7 @@ submit_any_log_128:
     - "minecraft:cherry_log"
   target-amount: 128
   description: "<gray>提交 <yellow>128 <gray>个任意类型原木"
+  icon: "minecraft:oak_log"
   reward:
     money: 600.0
     items:
@@ -567,6 +606,7 @@ submit_wheat_32:
   target-item: "minecraft:wheat"
   target-amount: 32
   description: "<gray>提交 <yellow>32 <gray>个小麦"
+  icon: "minecraft:wheat"
   reward:
     money: 150.0
     items:
@@ -582,6 +622,7 @@ submit_iron_ingot_32:
   target-item: "minecraft:iron_ingot"
   target-amount: 32
   description: "<gray>提交 <yellow>32 <gray>个铁锭"
+  icon: "minecraft:iron_ingot"
   reward:
     money: 400.0
     items:
@@ -597,6 +638,7 @@ submit_diamond_16:
   target-item: "minecraft:diamond"
   target-amount: 16
   description: "<gold>提交 <yellow>16 <gold>个钻石"
+  icon: "minecraft:diamond"
   reward:
     money: 2000.0
     items:
@@ -619,6 +661,7 @@ submit_recycle_64:
     - "minecraft:spider_eye"
   target-amount: 64
   description: "<gray>提交 <yellow>64 <gray>个怪物掉落物（回收任务）"
+  icon: "minecraft:rotten_flesh"
   reward:
     money: 200.0
     items:
@@ -637,6 +680,7 @@ kill_zombie_20:
   target-item: "minecraft:zombie"
   target-amount: 20
   description: "<gray>击杀 <yellow>20 <gray>只僵尸"
+  icon: "minecraft:zombie_spawn_egg"
   reward:
     money: 300.0
     items:
@@ -652,6 +696,7 @@ kill_skeleton_15:
   target-item: "minecraft:skeleton"
   target-amount: 15
   description: "<gray>击杀 <yellow>15 <gray>只骷髅"
+  icon: "minecraft:skeleton_spawn_egg"
   reward:
     money: 350.0
     items:
@@ -673,6 +718,7 @@ kill_any_hostile_50:
     - "minecraft:witch"
   target-amount: 50
   description: "<gold>击杀 <yellow>50 <gold>只任意敌对生物"
+  icon: "minecraft:iron_sword"
   reward:
     money: 800.0
     items:
@@ -685,9 +731,11 @@ kill_ender_dragon:
   type: KILL
   name: "屠龙者"
   version: 1
+  category: "permanent"
   target-item: "minecraft:ender_dragon"
   target-amount: 1
   description: "<dark_purple>击杀 <light_purple>末影龙"
+  icon: "minecraft:dragon_head"
   reward:
     money: 5000.0
     items:
@@ -710,6 +758,7 @@ breed_cow_10:
   target-item: "minecraft:cow"
   target-amount: 10
   description: "<gray>繁殖 <yellow>10 <gray>头牛"
+  icon: "minecraft:cow_spawn_egg"
   reward:
     money: 200.0
     items:
@@ -725,6 +774,7 @@ breed_sheep_10:
   target-item: "minecraft:sheep"
   target-amount: 10
   description: "<gray>繁殖 <yellow>10 <gray>只羊"
+  icon: "minecraft:sheep_spawn_egg"
   reward:
     money: 200.0
     items:
@@ -740,6 +790,7 @@ breed_pig_10:
   target-item: "minecraft:pig"
   target-amount: 10
   description: "<gray>繁殖 <yellow>10 <gray>头猪"
+  icon: "minecraft:pig_spawn_egg"
   reward:
     money: 200.0
     items:
@@ -761,6 +812,7 @@ breed_any_animal_30:
     - "minecraft:horse"
   target-amount: 30
   description: "<gold>繁殖 <yellow>30 <gold>只任意动物"
+  icon: "minecraft:wheat"
   reward:
     money: 600.0
     items:
@@ -769,6 +821,199 @@ breed_any_animal_30:
       - item: "minecraft:golden_carrot"
         amount: 8
   weight: 20
+
+# ============================================
+# 月度任务 (monthly)
+# ============================================
+
+# 月度大量采集任务
+monthly_harvest_master:
+  type: HARVEST
+  name: "月度采集大师"
+  version: 1
+  category: "monthly"
+  target-item:
+    - "minecraft:wheat"
+    - "minecraft:carrot"
+    - "minecraft:potato"
+    - "minecraft:beetroot"
+    - "minecraft:cocoa_beans"
+  target-amount: 512
+  description: "<blue>月度挑战：<gray>收获任意作物 <yellow>512 <gray>个"
+  icon: "minecraft:wheat"
+  weight: 25
+  reward:
+    money: 2000.0
+    items:
+      - item: "minecraft:diamond_block"
+        amount: 2
+      - item: "minecraft:emerald_block"
+        amount: 4
+
+# 月度击杀任务
+monthly_kill_master:
+  type: KILL
+  name: "月度战斗大师"
+  version: 1
+  category: "monthly"
+  target-item:
+    - "minecraft:zombie"
+    - "minecraft:skeleton"
+    - "minecraft:creeper"
+    - "minecraft:spider"
+    - "minecraft:enderman"
+  target-amount: 200
+  description: "<blue>月度挑战：<gray>击杀任意敌对生物 <yellow>200 <gray>只"
+  icon: "minecraft:diamond_sword"
+  weight: 20
+  reward:
+    money: 3000.0
+    items:
+      - item: "minecraft:netherite_ingot"
+        amount: 2
+      - item: "minecraft:enchanted_golden_apple"
+        amount: 2
+
+# 月度钓鱼大师
+monthly_fish_master:
+  type: FISH
+  name: "月度钓鱼大师"
+  version: 1
+  category: "monthly"
+  target-amount: 200
+  description: "<blue>月度挑战：<gray>钓起 <yellow>200 <gray>条鱼"
+  icon: "minecraft:fishing_rod"
+  weight: 22
+  reward:
+    money: 2500.0
+    items:
+      - item: "minecraft:enchanted_book"
+        amount: 3
+      - item: "minecraft:name_tag"
+        amount: 16
+
+# 月度合成大师
+monthly_craft_master:
+  type: CRAFT
+  name: "月度工匠"
+  version: 1
+  category: "monthly"
+  target-amount: 100
+  description: "<blue>月度挑战：<gray>合成任意物品 <yellow>100 <gray>次"
+  icon: "minecraft:crafting_table"
+  weight: 25
+  reward:
+    money: 1800.0
+    items:
+      - item: "minecraft:diamond"
+        amount: 16
+      - item: "minecraft:iron_block"
+        amount: 8
+
+# ============================================
+# 限时挑战任务 (limited)
+# ============================================
+
+# 限时紧急采集任务 - 7天内完成
+limited_emergency_harvest:
+  type: HARVEST
+  name: "紧急采集"
+  version: 1
+  category: "limited"
+  target-item:
+    - "minecraft:sugar_cane"
+    - "minecraft:bamboo"
+    - "minecraft:cactus"
+  target-amount: 128
+  description: "<red>限时挑战：<gray>紧急采集 <yellow>128 <gray>个竹子/甘蔗/仙人掌"
+  icon: "minecraft:sugar_cane"
+  weight: 30
+  reward:
+    money: 800.0
+    items:
+      - item: "minecraft:experience_bottle"
+        amount: 16
+      - item: "minecraft:diamond"
+        amount: 4
+
+# 限时击杀突袭者 - 7天内完成
+limited_raid_defense:
+  type: KILL
+  name: "村庄守卫者"
+  version: 1
+  category: "limited"
+  target-item:
+    - "minecraft:pillager"
+    - "minecraft:vindicator"
+    - "minecraft:evoker"
+    - "minecraft:ravager"
+  target-amount: 50
+  description: "<red>限时挑战：<gray>击杀袭击队成员 <yellow>50 <gray>只"
+  icon: "minecraft:crossbow"
+  weight: 25
+  reward:
+    money: 1200.0
+    items:
+      - item: "minecraft:emerald"
+        amount: 32
+      - item: "minecraft:totem_of_undying"
+        amount: 1
+
+# 限时下界探索 - 7天内完成
+limited_nether_explorer:
+  type: BREAK
+  name: "下界探险家"
+  version: 1
+  category: "limited"
+  target-item: "minecraft:ancient_debris"
+  target-amount: 10
+  description: "<red>限时挑战：<gray>挖掘 <yellow>10 <gray>个远古残骸"
+  icon: "minecraft:netherite_pickaxe"
+  weight: 20
+  reward:
+    money: 1500.0
+    items:
+      - item: "minecraft:netherite_scrap"
+        amount: 8
+      - item: "minecraft:netherite_ingot"
+        amount: 2
+
+# 限时快速合成 - 7天内完成
+limited_speed_crafting:
+  type: CRAFT
+  name: "极速工匠"
+  version: 1
+  category: "limited"
+  target-item: "minecraft:paper"
+  target-amount: 64
+  description: "<red>限时挑战：<gray>合成 <yellow>64 <gray>张纸"
+  icon: "minecraft:paper"
+  weight: 35
+  reward:
+    money: 500.0
+    items:
+      - item: "minecraft:bookshelf"
+        amount: 4
+      - item: "minecraft:enchanting_table"
+        amount: 1
+
+# 限时食物准备 - 7天内完成
+limited_food_preparation:
+  type: CONSUME
+  name: "宴会准备"
+  version: 1
+  category: "limited"
+  target-amount: 50
+  description: "<red>限时挑战：<gray>消耗 <yellow>50 <gray>个任意食物"
+  icon: "minecraft:cooked_beef"
+  weight: 30
+  reward:
+    money: 600.0
+    items:
+      - item: "minecraft:cake"
+        amount: 3
+      - item: "minecraft:golden_carrot"
+        amount: 16
 
 # ============================================
 # NBT匹配示例任务
@@ -784,6 +1029,7 @@ submit_named_diamond:
   target-item: "minecraft:diamond"
   target-amount: 5
   description: "<gray>提交 <yellow>5 <gray>个名为 <gold>§6稀有钻石 <gray>的钻石"
+  icon: "minecraft:diamond"
   # NBT匹配条件: 自定义名称必须完全匹配
   nbt-match:
     - "minecraft:custom_name+\"§6稀有钻石\""
@@ -804,6 +1050,7 @@ craft_enchanted_sword:
   target-item: "minecraft:diamond_sword"
   target-amount: 1
   description: "<gray>合成一把带有 <yellow>锋利3 <gray>以上的钻石剑"
+  icon: "minecraft:enchanted_book"
   # NBT匹配条件: 锋利附魔等级 >= 3
   nbt-match:
     - "minecraft:enchantments.minecraft:sharpness>=3"
@@ -822,6 +1069,7 @@ fish_treasure:
   target-item: "minecraft:enchanted_book"
   target-amount: 3
   description: "<gray>钓到 <yellow>3 <gray>本带有 <gold>经验修补 <gray>的附魔书"
+  icon: "minecraft:enchanted_book"
   # NBT匹配条件: 必须包含经验修补附魔
   nbt-match:
     - "minecraft:enchantments.minecraft:mending>=1"
@@ -841,6 +1089,7 @@ consume_custom_food:
   target-item: "minecraft:golden_apple"
   target-amount: 3
   description: "<gray>食用 <yellow>3 <gray>个 <gold>特制金苹果"
+  icon: "minecraft:golden_apple"
   # NBT匹配条件: 必须有 custom_data.quest_item=true
   nbt-match:
     - "minecraft:custom_data+{quest_item:true,food_type:'special_golden_apple'}"

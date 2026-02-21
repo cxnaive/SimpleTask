@@ -40,11 +40,16 @@ public class GUIManager {
 
     /**
      * 关闭所有打开的GUI
+     * 使用玩家调度器确保线程安全
      */
     public static void closeAll() {
         for (AbstractGUI gui : openGUIs.values()) {
-            if (gui.getPlayer().isOnline()) {
-                gui.getPlayer().closeInventory();
+            Player player = gui.getPlayer();
+            if (player.isOnline()) {
+                // 使用玩家调度器关闭背包
+                player.getScheduler().execute(gui.plugin, () -> {
+                    player.closeInventory();
+                }, () -> {}, 0L);
             }
         }
         openGUIs.clear();
@@ -56,10 +61,29 @@ public class GUIManager {
     public static void refreshAll() {
         for (AbstractGUI gui : openGUIs.values()) {
             if (gui.getPlayer().isOnline()) {
-                gui.getPlayer().getScheduler().execute(gui.getPlayer().getServer().getPluginManager().getPlugin("SimpleTask"), () -> {
+                gui.getPlayer().getScheduler().execute(gui.plugin, () -> {
                     gui.initialize();
-                }, null, 0);
+                }, () -> {}, 0L);
             }
+        }
+    }
+
+    /**
+     * 关闭指定玩家的GUI（如果打开）
+     * 使用玩家调度器确保线程安全
+     *
+     * @param uuid 玩家UUID
+     */
+    public static void closePlayerGUI(UUID uuid) {
+        AbstractGUI gui = openGUIs.get(uuid);
+        if (gui != null) {
+            Player player = gui.getPlayer();
+            if (player.isOnline()) {
+                player.getScheduler().execute(gui.plugin, () -> {
+                    player.closeInventory();
+                }, () -> {}, 0L);
+            }
+            openGUIs.remove(uuid);
         }
     }
 }

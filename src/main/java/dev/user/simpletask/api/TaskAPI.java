@@ -13,7 +13,7 @@ import java.util.UUID;
  */
 public class TaskAPI {
 
-    private static SimpleTaskPlugin plugin;
+    private static volatile SimpleTaskPlugin plugin;
 
     /**
      * Internal use only - called by plugin on enable

@@ -11,7 +11,6 @@ import org.bukkit.block.Block;
 import org.bukkit.block.BlockState;
 import org.bukkit.block.data.Ageable;
 import org.bukkit.entity.Entity;
-import org.bukkit.entity.FishHook;
 import org.bukkit.entity.Item;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
@@ -52,7 +51,13 @@ public class TaskListener implements Listener {
             .expireAfterWrite(5, TimeUnit.SECONDS)
             .build();
 
-    private record BlockBreakInfo(BlockState state, boolean isPlayerPlaced) {}
+    private record BlockBreakInfo(BlockState state, boolean isPlayerPlaced, long tick) {}
+
+    // ===== 堆叠作物处理去重缓存 =====
+    // Key: playerUUID + location + tick分组, Value: 已处理标记
+    private final Cache<String, Boolean> stackableCropProcessed = CacheBuilder.newBuilder()
+            .expireAfterWrite(100, TimeUnit.MILLISECONDS) // 100ms = 约2 ticks
+            .build();
 
     public TaskListener(SimpleTaskPlugin plugin) {
         this.plugin = plugin;
@@ -99,12 +104,10 @@ public class TaskListener implements Listener {
             itemKey = "minecraft:" + result.getType().name().toLowerCase();
         }
 
-        // Calculate actual amount crafted (considering shift-click)
+        // 只处理普通点击的准确数量
+        // 注意：Shift+点击合成时，实际获得的数量取决于背包空间，无法在此事件准确计算
+        // 玩家可以通过普通点击多次合成来准确累计进度，Shift+点击只会计为1次合成
         int amount = result.getAmount();
-        if (event.isShiftClick()) {
-            // Estimate the maximum amount that can be crafted
-            amount = Math.min(amount * 64, result.getMaxStackSize());
-        }
 
         // 注意：合成结果物品的NBT在CraftItemEvent时还未应用到玩家背包
         // 这里使用配方结果物品的NBT（如果有）
@@ -248,8 +251,11 @@ public class TaskListener implements Listener {
         // 检查是否是玩家自己放置的（防刷检测）
         boolean isPlayerPlaced = plugin.getAntiCheatManager().isPlayerPlacedBlock(block.getLocation());
 
+        // 获取当前 tick 用于去重
+        long currentTick = player.getWorld().getFullTime();
+
         // 保存方块信息供 BlockDropItemEvent 使用（在清除防刷记录之前）
-        saveBlockBreakInfo(player, block, isPlayerPlaced);
+        saveBlockBreakInfo(player, block, isPlayerPlaced, currentTick);
         if (!isPlayerPlaced) {
             taskManager.updateProgress(player, TaskType.BREAK, itemKey, 1);
         }
@@ -257,7 +263,12 @@ public class TaskListener implements Listener {
         // 处理堆叠作物（竹子、甘蔗、仙人掌）的 HARVEST 任务
         // 这些作物破坏底部时上方会连锁掉落，需要特殊处理
         if (isStackableCrop(type)) {
-            handleStackableCropHarvest(player, block, type);
+            // 检查是否已在同一 tick 处理过这个位置（防止重复计算）
+            String dedupKey = getStackableCropDedupKey(player.getUniqueId(), block.getLocation(), currentTick);
+            if (stackableCropProcessed.getIfPresent(dedupKey) == null) {
+                stackableCropProcessed.put(dedupKey, true);
+                handleStackableCropHarvest(player, block, type, currentTick);
+            }
         }
 
         // 清除防刷记录（所有检测完成后）
@@ -272,16 +283,25 @@ public class TaskListener implements Listener {
     }
 
     /**
-     * 处理堆叠作物的 HARVEST 任务
+     * 处理堆叠作物的 HARVEST 任务（带 tick 去重）
      * 向上扫描相同类型的方块，计算总数量（排除玩家放置的）
      */
-    private void handleStackableCropHarvest(Player player, Block block, Material type) {
+    private void handleStackableCropHarvest(Player player, Block block, Material type, long currentTick) {
         int totalCount = 0;
         Block current = block;
 
         // 向上扫描相同类型的方块
         while (current.getType() == type) {
             Location loc = current.getLocation();
+
+            // 检查是否在此 tick 已处理过这个方块（防止快速连击重复计算）
+            String blockDedupKey = player.getUniqueId().toString() + "@" + loc.toString() + "#" + (currentTick / 2);
+            if (stackableCropProcessed.getIfPresent(blockDedupKey) != null) {
+                current = current.getRelative(0, 1, 0);
+                continue;
+            }
+            stackableCropProcessed.put(blockDedupKey, true);
+
             boolean isPlayerPlaced = plugin.getAntiCheatManager().isPlayerPlacedBlock(loc);
 
             if (!isPlayerPlaced) {
@@ -305,10 +325,19 @@ public class TaskListener implements Listener {
     /**
      * 保存方块信息供后续事件使用
      */
-    private void saveBlockBreakInfo(Player player, Block block, boolean isPlayerPlaced) {
+    private void saveBlockBreakInfo(Player player, Block block, boolean isPlayerPlaced, long tick) {
         BlockState state = block.getState();
         String key = getBlockKey(player.getUniqueId(), block.getLocation());
-        brokenBlockInfo.put(key, new BlockBreakInfo(state, isPlayerPlaced));
+        brokenBlockInfo.put(key, new BlockBreakInfo(state, isPlayerPlaced, tick));
+    }
+
+    /**
+     * 生成堆叠作物去重键
+     */
+    private String getStackableCropDedupKey(UUID playerUuid, Location location, long tick) {
+        return playerUuid.toString() + "@" + location.getWorld().getName() + ":"
+            + location.getBlockX() + "," + location.getBlockY() + "," + location.getBlockZ()
+            + "#" + tick; // 使用单 tick，精确去重
     }
 
     private String getBlockKey(UUID playerUuid, Location location) {
@@ -335,6 +364,13 @@ public class TaskListener implements Listener {
         // 获取保存的方块信息（BlockBreakEvent中保存的）
         BlockBreakInfo info = getBlockBreakInfo(player, loc);
         if (info == null) return;
+
+        // 检查tick一致性，防止竞态条件（允许当前tick或上一tick）
+        long currentTick = player.getWorld().getFullTime();
+        if (info.tick() != currentTick && info.tick() != currentTick - 1) {
+            // 过旧的缓存数据，忽略
+            return;
+        }
 
         BlockState state = info.state();
         boolean wasPlayerPlaced = info.isPlayerPlaced();

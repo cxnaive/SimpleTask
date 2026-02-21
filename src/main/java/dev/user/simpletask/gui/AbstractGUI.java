@@ -10,6 +10,7 @@ import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.InventoryHolder;
 import org.bukkit.inventory.ItemStack;
 
+import dev.user.simpletask.util.MessageUtil;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -52,9 +53,7 @@ public abstract class AbstractGUI implements InventoryHolder {
      */
     public void open() {
         // Parse MiniMessage to Component for title
-        Component titleComponent = LegacyComponentSerializer.legacySection().deserialize(
-            dev.user.simpletask.util.MessageUtil.toLegacyString(title)
-        );
+        Component titleComponent = MessageUtil.parse(title);
         inventory = Bukkit.createInventory(this, size, titleComponent);
         initialize();
         player.openInventory(inventory);

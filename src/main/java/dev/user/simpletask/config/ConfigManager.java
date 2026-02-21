@@ -1,14 +1,22 @@
 package dev.user.simpletask.config;
 
 import dev.user.simpletask.SimpleTaskPlugin;
+import dev.user.simpletask.task.ExpirePolicy;
 import dev.user.simpletask.task.Reward;
 import dev.user.simpletask.task.TaskTemplate;
 import dev.user.simpletask.task.TaskType;
+import dev.user.simpletask.task.category.TaskCategory;
+import dev.user.simpletask.util.MessageUtil;
+import net.kyori.adventure.text.Component;
 import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.configuration.file.YamlConfiguration;
 
 import java.io.File;
+import java.time.DayOfWeek;
+import java.time.Duration;
+import java.time.LocalTime;
+import java.time.format.DateTimeParseException;
 import java.util.*;
 
 public class ConfigManager {
@@ -18,18 +26,12 @@ public class ConfigManager {
     private FileConfiguration tasksConfig;
     private File tasksFile;
 
-    // Daily task settings
-    private int dailyTaskCount;
-    private boolean autoClaim;
-    private int dailyRerollMax;
-    private double dailyRerollCost;
-    private boolean rerollKeepCompleted;
-
     // Template sync settings
     private int templateSyncInterval;
 
     // Data retention settings
     private int dataRetentionDays;
+    private int taskCheckIntervalMinutes;
 
     // Anti-cheat settings
     private boolean antiCheatEnabled;
@@ -46,12 +48,17 @@ public class ConfigManager {
     private String h2Filename;
 
     // GUI settings
-    private String guiTitleDailyTasks;
     private String guiTitleAdmin;
 
     // Messages
     private String messagePrefix;
     private Map<String, String> messages;
+
+    // Message cache (Component level)
+    private final Map<String, Component> messageCache = new HashMap<>();
+
+    // Task categories
+    private final Map<String, TaskCategory> taskCategories = new HashMap<>();
 
     public ConfigManager(SimpleTaskPlugin plugin) {
         this.plugin = plugin;
@@ -69,14 +76,9 @@ public class ConfigManager {
     }
 
     public void loadConfig() {
-        // Daily tasks
-        this.dailyTaskCount = config.getInt("daily-tasks.daily-count", 5);
-        this.autoClaim = config.getBoolean("daily-tasks.auto-claim", false);
-        this.dailyRerollMax = config.getInt("daily-tasks.reroll.max-per-day", 3);
-        this.dailyRerollCost = config.getDouble("daily-tasks.reroll.cost", 100.0);
-        this.rerollKeepCompleted = config.getBoolean("daily-tasks.reroll.keep-completed", true);
         this.templateSyncInterval = config.getInt("template.sync-interval", 0); // 0 = disabled
         this.dataRetentionDays = config.getInt("data.retention-days", 7); // 默认保留7天
+        this.taskCheckIntervalMinutes = config.getInt("task-check.interval-minutes", 5); // 默认5分钟
 
         // Anti-cheat settings
         this.antiCheatEnabled = config.getBoolean("anti-cheat.enabled", true);
@@ -93,13 +95,239 @@ public class ConfigManager {
         this.h2Filename = config.getString("database.h2.filename", "simpletask");
 
         // GUI titles
-        this.guiTitleDailyTasks = config.getString("gui.titles.daily-tasks", "<dark_gray>每日任务");
         this.guiTitleAdmin = config.getString("gui.titles.admin", "<dark_gray>任务管理");
 
         // Messages
-        this.messagePrefix = config.getString("messages.prefix", "<gold>[每日任务] <reset>");
+        this.messagePrefix = config.getString("messages.prefix", "<gold>[任务系统] <reset>");
         this.messages = new HashMap<>();
         loadMessages();
+
+        // Clear message cache on reload
+        messageCache.clear();
+
+        // Load task categories
+        loadTaskCategories();
+    }
+
+    /**
+     * 加载任务类别配置
+     */
+    private void loadTaskCategories() {
+        taskCategories.clear();
+
+        ConfigurationSection section = config.getConfigurationSection("task-categories");
+        if (section == null) {
+            // 如果没有配置，加载默认类别
+            loadDefaultCategories();
+            return;
+        }
+
+        for (String key : section.getKeys(false)) {
+            ConfigurationSection catSection = section.getConfigurationSection(key);
+            if (catSection == null) continue;
+
+            TaskCategory category = parseCategory(key, catSection);
+            taskCategories.put(key, category);
+            plugin.getLogger().info("[Config] Loaded task category: " + key);
+        }
+
+        // 确保至少有 daily 类别
+        if (!taskCategories.containsKey("daily")) {
+            taskCategories.put("daily", createDefaultDailyCategory());
+        }
+    }
+
+    /**
+     * 解析类别配置
+     */
+    private TaskCategory parseCategory(String id, ConfigurationSection section) {
+        TaskCategory category = new TaskCategory(id);
+        category.setEnabled(section.getBoolean("enabled", true));
+
+        // 显示配置
+        ConfigurationSection displaySection = section.getConfigurationSection("display");
+        if (displaySection != null) {
+            category.setDisplayName(displaySection.getString("name", "<yellow>" + id));
+            category.setLore(displaySection.getStringList("lore"));
+            category.setItem(displaySection.getString("item", "minecraft:paper"));
+            category.setSlot(displaySection.getInt("slot", -1));
+        }
+
+        // 分配配置
+        ConfigurationSection assignSection = section.getConfigurationSection("assignment");
+        if (assignSection != null) {
+            category.setMaxConcurrent(assignSection.getInt("max-concurrent", 3));
+            category.setAutoAssign(assignSection.getBoolean("auto-assign", true));
+            category.setExpirePolicy(ExpirePolicy.fromString(assignSection.getString("expire-policy", "daily")));
+            category.setRepeatable(assignSection.getBoolean("repeatable", true));
+            category.setAutoClaim(assignSection.getBoolean("auto-claim", false));
+
+            String resetAfter = assignSection.getString("reset-after-complete");
+            if (resetAfter != null) {
+                category.setResetAfterComplete(parseDuration(resetAfter));
+            }
+        }
+
+        // 刷新配置
+        ConfigurationSection resetSection = section.getConfigurationSection("reset");
+        if (resetSection != null) {
+            String timeStr = resetSection.getString("time", "04:00");
+            try {
+                category.setResetTime(LocalTime.parse(timeStr));
+            } catch (DateTimeParseException e) {
+                category.setResetTime(LocalTime.of(4, 0));
+            }
+
+            String dayOfWeek = resetSection.getString("day-of-week", "MONDAY");
+            try {
+                category.setResetDayOfWeek(DayOfWeek.valueOf(dayOfWeek.toUpperCase()));
+            } catch (IllegalArgumentException e) {
+                category.setResetDayOfWeek(DayOfWeek.MONDAY);
+            }
+
+            category.setResetDayOfMonth(resetSection.getInt("day-of-month", 1));
+        }
+
+        // 相对时间配置
+        ConfigurationSection relativeSection = section.getConfigurationSection("relative");
+        if (relativeSection != null) {
+            String duration = relativeSection.getString("default-duration", "7d");
+            category.setDefaultDuration(parseDuration(duration));
+
+            String warning = relativeSection.getString("warning-before", "24h");
+            category.setWarningBefore(parseDuration(warning));
+        }
+
+        // 固定时间配置
+        ConfigurationSection fixedSection = section.getConfigurationSection("fixed");
+        if (fixedSection != null) {
+            category.setFixedStart(fixedSection.getString("start"));
+            category.setFixedEnd(fixedSection.getString("end"));
+        }
+
+        // Reroll 配置
+        ConfigurationSection rerollSection = section.getConfigurationSection("reroll");
+        if (rerollSection != null) {
+            category.setRerollEnabled(rerollSection.getBoolean("enabled", true));
+            category.setRerollCost(rerollSection.getDouble("cost", 0.0));
+            category.setRerollMaxCount(rerollSection.getInt("max-count", 3));
+            category.setRerollKeepCompleted(rerollSection.getBoolean("keep-completed", true));
+
+            // 重置策略（与任务过期策略相同）
+            String resetPolicy = rerollSection.getString("reset-policy", "daily");
+            category.setRerollResetPolicy(ExpirePolicy.fromString(resetPolicy));
+
+            // 重置时间
+            String resetTimeStr = rerollSection.getString("reset-time", "04:00");
+            try {
+                category.setRerollResetTime(LocalTime.parse(resetTimeStr));
+            } catch (DateTimeParseException e) {
+                category.setRerollResetTime(LocalTime.of(4, 0));
+            }
+
+            // 周常重置星期几
+            String resetDayOfWeek = rerollSection.getString("reset-day-of-week", "MONDAY");
+            try {
+                category.setRerollResetDayOfWeek(DayOfWeek.valueOf(resetDayOfWeek.toUpperCase()));
+            } catch (IllegalArgumentException e) {
+                category.setRerollResetDayOfWeek(DayOfWeek.MONDAY);
+            }
+
+            // 月常重置日期
+            category.setRerollResetDayOfMonth(rerollSection.getInt("reset-day-of-month", 1));
+
+            // 相对时间重置的持续时间
+            String resetDuration = rerollSection.getString("reset-duration", "1d");
+            category.setRerollResetDuration(parseDuration(resetDuration));
+        }
+
+        return category;
+    }
+
+    /**
+     * 解析持续时间字符串 (如 "7d", "24h", "30m")
+     */
+    private Duration parseDuration(String input) {
+        if (input == null || input.isEmpty()) {
+            return Duration.ofDays(7);
+        }
+
+        input = input.trim().toLowerCase();
+        try {
+            if (input.endsWith("d")) {
+                return Duration.ofDays(Long.parseLong(input.substring(0, input.length() - 1)));
+            } else if (input.endsWith("h")) {
+                return Duration.ofHours(Long.parseLong(input.substring(0, input.length() - 1)));
+            } else if (input.endsWith("m")) {
+                return Duration.ofMinutes(Long.parseLong(input.substring(0, input.length() - 1)));
+            } else if (input.endsWith("s")) {
+                return Duration.ofSeconds(Long.parseLong(input.substring(0, input.length() - 1)));
+            } else {
+                // 纯数字，默认为天
+                return Duration.ofDays(Long.parseLong(input));
+            }
+        } catch (NumberFormatException e) {
+            plugin.getLogger().warning("Invalid duration format: " + input + ", using default 7d");
+            return Duration.ofDays(7);
+        }
+    }
+
+    /**
+     * 加载默认类别（当没有配置时）
+     */
+    private void loadDefaultCategories() {
+        taskCategories.put("daily", createDefaultDailyCategory());
+        plugin.getLogger().info("[Config] Loaded default daily category");
+    }
+
+    /**
+     * 创建默认 daily 类别
+     */
+    private TaskCategory createDefaultDailyCategory() {
+        TaskCategory category = new TaskCategory("daily");
+        category.setDisplayName("<gold><bold>每日任务");
+        category.setLore(Arrays.asList(
+            "<gray>每天更新的任务",
+            "<gray>每日 <yellow>4:00 <gray>刷新"
+        ));
+        category.setItem("minecraft:clock");
+        category.setSlot(0);
+        category.setMaxConcurrent(5);
+        category.setAutoAssign(true);
+        category.setExpirePolicy(ExpirePolicy.DAILY);
+        category.setRepeatable(true);
+        category.setResetTime(LocalTime.of(4, 0));
+        return category;
+    }
+
+    /**
+     * 获取任务类别
+     */
+    public TaskCategory getTaskCategory(String id) {
+        return taskCategories.get(id);
+    }
+
+    /**
+     * 获取所有启用的类别
+     */
+    public Collection<TaskCategory> getEnabledCategories() {
+        return taskCategories.values().stream()
+            .filter(TaskCategory::isEnabled)
+            .toList();
+    }
+
+    /**
+     * 获取所有类别
+     */
+    public Collection<TaskCategory> getAllCategories() {
+        return taskCategories.values();
+    }
+
+    /**
+     * 获取所有类别（返回 Map）
+     */
+    public Map<String, TaskCategory> getTaskCategories() {
+        return new HashMap<>(taskCategories);
     }
 
     private void loadMessages() {
@@ -230,33 +458,16 @@ public class ConfigManager {
         }
     }
 
-    // Daily task settings
-    public int getDailyTaskCount() {
-        return dailyTaskCount;
-    }
-
-    public boolean isAutoClaim() {
-        return autoClaim;
-    }
-
-    public int getDailyRerollMax() {
-        return dailyRerollMax;
-    }
-
-    public double getDailyRerollCost() {
-        return dailyRerollCost;
-    }
-
-    public boolean isRerollKeepCompleted() {
-        return rerollKeepCompleted;
-    }
-
     public int getTemplateSyncInterval() {
         return templateSyncInterval;
     }
 
     public int getDataRetentionDays() {
         return dataRetentionDays;
+    }
+
+    public int getTaskCheckIntervalMinutes() {
+        return taskCheckIntervalMinutes;
     }
 
     // Anti-cheat settings
@@ -302,12 +513,12 @@ public class ConfigManager {
     }
 
     // GUI settings
-    public String getGuiTitleDailyTasks() {
-        return guiTitleDailyTasks;
-    }
-
     public String getGuiTitleAdmin() {
         return guiTitleAdmin;
+    }
+
+    public String getGuiTitleTaskCategories() {
+        return config.getString("gui.title.task-categories", "<gold><bold>任务系统");
     }
 
     public String getGuiDecoration(String key) {
@@ -315,21 +526,48 @@ public class ConfigManager {
     }
 
     // Messages
+    /**
+     * 获取消息（自动添加prefix）
+     * 注意：返回的字符串包含prefix，但不包含任何placeholder替换
+     */
     public String getMessage(String key) {
         String msg = messages.getOrDefault(key, key);
         return messagePrefix + msg;
     }
 
-    public String getMessage(String key, Map<String, String> placeholders) {
-        String msg = getMessage(key);
-        for (Map.Entry<String, String> entry : placeholders.entrySet()) {
-            msg = msg.replace("{" + entry.getKey() + "}", entry.getValue());
-        }
-        return msg;
-    }
-
+    /**
+     * 获取原始消息（不包含prefix，用于进一步处理）
+     */
     public String getRawMessage(String key) {
         return messages.getOrDefault(key, key);
+    }
+
+    /**
+     * 获取缓存的Component消息（用于频繁访问的GUI消息）
+     * 性能优于每次重新解析MiniMessage字符串
+     */
+    public Component getCachedMessage(String key) {
+        return messageCache.computeIfAbsent(key, k ->
+            MessageUtil.parse(messages.getOrDefault(k, k))
+        );
+    }
+
+    /**
+     * 获取缓存的Component（带文本placeholder替换）
+     */
+    public Component getCachedMessage(String key, Map<String, String> placeholders) {
+        Component base = getCachedMessage(key);
+        if (placeholders == null || placeholders.isEmpty()) {
+            return base;
+        }
+        return MessageUtil.parse(messages.getOrDefault(key, key), placeholders);
+    }
+
+    /**
+     * 清除消息缓存（在配置重载时自动调用）
+     */
+    public void clearMessageCache() {
+        messageCache.clear();
     }
 
     public String getPrefix() {
@@ -345,16 +583,11 @@ public class ConfigManager {
         return config.getStringList("commands.help-" + key);
     }
 
+    /**
+     * 获取管理员消息（原始消息，不包含placeholder替换）
+     */
     public String getAdminMessage(String key) {
         return config.getString("admin." + key, key);
-    }
-
-    public String getAdminMessage(String key, Map<String, String> placeholders) {
-        String msg = getAdminMessage(key);
-        for (Map.Entry<String, String> entry : placeholders.entrySet()) {
-            msg = msg.replace("{" + entry.getKey() + "}", entry.getValue());
-        }
-        return msg;
     }
 
     public String getTaskTypeName(TaskType type) {
@@ -365,16 +598,11 @@ public class ConfigManager {
         return config.getString("status." + key, key);
     }
 
+    /**
+     * 获取GUI消息（原始消息，不包含placeholder替换）
+     */
     public String getGuiMessage(String key) {
         return config.getString("gui.task-item." + key, key);
-    }
-
-    public String getGuiMessage(String key, Map<String, String> placeholders) {
-        String msg = getGuiMessage(key);
-        for (Map.Entry<String, String> entry : placeholders.entrySet()) {
-            msg = msg.replace("{" + entry.getKey() + "}", entry.getValue());
-        }
-        return msg;
     }
 
     public String getEconomyMessage(String key) {
@@ -417,11 +645,13 @@ public class ConfigManager {
         String description = section.getString("description", "完成任务");
         String icon = section.getString("icon", getDefaultIconForType(type));
         int weight = section.getInt("weight", 10);
+        String category = section.getString("category", "daily");
 
         // Parse reward
         Reward reward = parseReward(section.getConfigurationSection("reward"));
 
         TaskTemplate template = new TaskTemplate(key, name, type, targetItems, targetAmount, description, icon, weight, reward);
+        template.setCategory(category);
 
         // 解析版本号（可选，默认为1）
         int version = section.getInt("version", 1);
@@ -444,10 +674,6 @@ public class ConfigManager {
             }
         }
         template.setNbtMatchConditions(nbtMatchConditions);
-
-        // 解析方块状态匹配条件（可选，用于BREAK/HARVEST任务）
-        List<String> blockStateConditions = section.getStringList("block-state");
-        template.setBlockStateConditions(blockStateConditions);
 
         return template;
     }
