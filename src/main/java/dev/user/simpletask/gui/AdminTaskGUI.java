@@ -143,6 +143,7 @@ public class AdminTaskGUI extends AbstractGUI {
             case SUBMIT -> Material.CHEST;
             case KILL -> Material.IRON_SWORD;
             case BREED -> Material.WHEAT;
+            case COMMAND -> Material.COMMAND_BLOCK;
         };
     }
 

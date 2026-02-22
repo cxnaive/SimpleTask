@@ -27,6 +27,7 @@ import org.bukkit.event.player.PlayerInteractEvent;
 import org.bukkit.event.player.PlayerItemConsumeEvent;
 import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
+import org.bukkit.event.player.PlayerCommandPreprocessEvent;
 import org.bukkit.event.player.AsyncPlayerChatEvent;
 import org.bukkit.event.block.Action;
 import org.bukkit.event.entity.EntityDeathEvent;
@@ -503,5 +504,17 @@ public class TaskListener implements Listener {
 
         // 更新繁殖任务进度
         taskManager.updateProgress(player, TaskType.BREED, entityKey, 1);
+    }
+
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    public void onPlayerCommand(PlayerCommandPreprocessEvent event) {
+        Player player = event.getPlayer();
+        String fullCommand = event.getMessage();
+
+        // 提取命令名（去除 / 前缀，取第一个空格前的部分）
+        String commandName = fullCommand.substring(1).split(" ")[0].toLowerCase();
+
+        // 更新命令任务进度
+        taskManager.updateProgress(player, TaskType.COMMAND, commandName, 1);
     }
 }

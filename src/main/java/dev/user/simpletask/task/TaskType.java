@@ -9,7 +9,8 @@ public enum TaskType {
     HARVEST(true),      // 收获，需要目标作物
     SUBMIT(true),       // 提交，需要提交特定物品（点击GUI时扫描背包）
     KILL(true),         // 击杀，需要目标实体类型
-    BREED(true);        // 繁殖，需要目标实体类型
+    BREED(true),        // 繁殖，需要目标实体类型
+    COMMAND(true);      // 命令，需要执行指定命令
 
     private final boolean requiresTarget;
 
@@ -32,6 +33,7 @@ public enum TaskType {
             case SUBMIT -> "提交";
             case KILL -> "击杀";
             case BREED -> "繁殖";
+            case COMMAND -> "命令";
         };
     }
 }

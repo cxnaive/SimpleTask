@@ -1118,6 +1118,48 @@ consume_custom_food:
   weight: 18
 
 # ============================================
+# 命令任务 (COMMAND)
+# ============================================
+# 玩家执行指定命令完成任务
+# target-item: 命令名称（不带 / 前缀，不区分大小写）
+# 支持单个命令或命令列表
+
+# 使用 /spawn 命令
+command_spawn:
+  type: COMMAND
+  name: "传送新手"
+  version: 1
+  category: daily
+  target-item: "spawn"
+  target-amount: 1
+  description: "<gray>使用 <yellow>/spawn <gray>命令传送回出生点"
+  icon: "minecraft:compass"
+  reward:
+    money: 50.0
+  weight: 40
+
+# 使用任意传送命令
+command_teleport:
+  type: COMMAND
+  name: "传送达人"
+  version: 1
+  category: daily
+  target-items:
+    - "spawn"
+    - "home"
+    - "tpa"
+    - "warp"
+  target-amount: 3
+  description: "<gray>使用任意传送命令 <yellow>3 <gray>次"
+  icon: "minecraft:ender_pearl"
+  reward:
+    money: 100.0
+    items:
+      - item: "minecraft:ender_pearl"
+        amount: 3
+  weight: 35
+
+# ============================================
 # NBT匹配配置说明
 # ============================================
 # 支持的操作符:

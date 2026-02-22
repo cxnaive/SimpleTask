@@ -272,6 +272,7 @@ task-types:
   SUBMIT: "提交"
   KILL: "击杀"
   BREED: "繁殖"
+  COMMAND: "命令"
 
 # 通用状态
 status:

@@ -680,6 +680,7 @@ public class ConfigManager {
             case SUBMIT -> "minecraft:chest";
             case KILL -> "minecraft:iron_sword";
             case BREED -> "minecraft:wheat";
+            case COMMAND -> "minecraft:command_block";
         };
     }
 
