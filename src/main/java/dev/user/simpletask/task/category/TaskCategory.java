@@ -25,7 +25,6 @@ public class TaskCategory {
     // 分配配置
     private int maxConcurrent = 3;
     private boolean autoAssign = true;
-    private boolean repeatable = true;
     private boolean autoClaim = false;  // 自动领取奖励
     private Duration resetAfterComplete;
 
@@ -210,14 +209,6 @@ public class TaskCategory {
 
     public void setAutoAssign(boolean autoAssign) {
         this.autoAssign = autoAssign;
-    }
-
-    public boolean isRepeatable() {
-        return repeatable;
-    }
-
-    public void setRepeatable(boolean repeatable) {
-        this.repeatable = repeatable;
     }
 
     public boolean isAutoClaim() {

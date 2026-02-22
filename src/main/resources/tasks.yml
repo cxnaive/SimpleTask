@@ -23,6 +23,23 @@
 #         示例: "minecraft:diamond", "myce:custom_item"
 # - weight: 抽取权重
 # - reward: 奖励配置
+# ============================================
+# NBT匹配配置说明
+# ============================================
+# 支持的操作符:
+#   +    : 精确匹配 (如: "minecraft:custom_name+\"§6传说之剑\"")
+#   >=   : 数值大于等于 (如: "minecraft:enchantments.levels.minecraft:sharpness>=5")
+#   <=   : 数值小于等于 (如: "minecraft:damage<=100")
+#   >    : 数值大于
+#   <    : 数值小于
+#   exists: 存在性检查 (如: "minecraft:custom_name+exists")
+#
+# 多个条件为 AND 关系，必须全部满足
+#
+# 注意:
+# - SUBMIT/CRAFT/FISH/CONSUME 任务支持 NBT 匹配
+# - KILL/BREAK/HARVEST/BREED 任务暂时不支持 NBT 匹配（配置会保存但不生效）
+# - CHAT 任务不支持 NBT 匹配（聊天消息无 NBT 数据）
 
 # 发言任务
 # 支持 target-item 指定关键词，也支持 target-items 列表形式

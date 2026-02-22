@@ -61,7 +61,6 @@ task-categories:
       auto-assign: true
       auto-claim: false       # 任务完成时自动领取奖励（false: 需手动点击领取）
       expire-policy: "daily"
-      repeatable: true
     reset:
       time: "04:00"
     reroll:
@@ -88,7 +87,6 @@ task-categories:
       max-concurrent: 3
       auto-assign: true
       expire-policy: "weekly"
-      repeatable: true
     reset:
       day-of-week: "MONDAY"
       time: "04:00"
@@ -115,7 +113,6 @@ task-categories:
       max-concurrent: 2
       auto-assign: true
       expire-policy: "monthly"
-      repeatable: true
     reset:
       day-of-month: 1
       time: "04:00"
@@ -142,7 +139,6 @@ task-categories:
       max-concurrent: 2
       auto-assign: true
       expire-policy: "relative"
-      repeatable: true
     relative:
       default-duration: "7d"
       warning-before: "24h"
@@ -168,7 +164,6 @@ task-categories:
       max-concurrent: 10
       auto-assign: true
       expire-policy: "permanent"
-      repeatable: true
     reroll:
       enabled: false      # 永久任务不支持刷新
       cost: 0.0

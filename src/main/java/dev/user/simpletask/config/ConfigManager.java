@@ -159,7 +159,6 @@ public class ConfigManager {
             category.setMaxConcurrent(assignSection.getInt("max-concurrent", 3));
             category.setAutoAssign(assignSection.getBoolean("auto-assign", true));
             category.setExpirePolicy(ExpirePolicy.fromString(assignSection.getString("expire-policy", "daily")));
-            category.setRepeatable(assignSection.getBoolean("repeatable", true));
             category.setAutoClaim(assignSection.getBoolean("auto-claim", false));
 
             String resetAfter = assignSection.getString("reset-after-complete");
@@ -295,7 +294,6 @@ public class ConfigManager {
         category.setMaxConcurrent(5);
         category.setAutoAssign(true);
         category.setExpirePolicy(ExpirePolicy.DAILY);
-        category.setRepeatable(true);
         category.setResetTime(LocalTime.of(4, 0));
         return category;
     }
