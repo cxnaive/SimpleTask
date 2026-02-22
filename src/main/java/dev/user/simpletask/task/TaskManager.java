@@ -39,7 +39,7 @@ public class TaskManager {
         this.taskGenerator = new TaskGenerator(plugin, templateSyncManager);
         this.expireManager = new TaskExpireManager(plugin, cacheManager, taskGenerator, templateSyncManager);
         this.rerollManager = new RerollManager(plugin, cacheManager, taskGenerator, templateSyncManager);
-        this.taskScheduler = new TaskScheduler(plugin, expireManager);
+        this.taskScheduler = new TaskScheduler(plugin);
         this.progressManager = new TaskProgressManager(plugin, cacheManager);
 
         // 启动时从数据库加载模板

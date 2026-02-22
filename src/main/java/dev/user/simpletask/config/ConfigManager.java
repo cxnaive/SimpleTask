@@ -29,8 +29,6 @@ public class ConfigManager {
     // Template sync settings
     private int templateSyncInterval;
 
-    // Data retention settings
-    private int dataRetentionDays;
     private int taskCheckIntervalMinutes;
 
     // Anti-cheat settings
@@ -77,7 +75,6 @@ public class ConfigManager {
 
     public void loadConfig() {
         this.templateSyncInterval = config.getInt("template.sync-interval", 0); // 0 = disabled
-        this.dataRetentionDays = config.getInt("data.retention-days", 7); // 默认保留7天
         this.taskCheckIntervalMinutes = config.getInt("task-check.interval-minutes", 5); // 默认5分钟
 
         // Anti-cheat settings
@@ -458,10 +455,6 @@ public class ConfigManager {
 
     public int getTemplateSyncInterval() {
         return templateSyncInterval;
-    }
-
-    public int getDataRetentionDays() {
-        return dataRetentionDays;
     }
 
     public int getTaskCheckIntervalMinutes() {
