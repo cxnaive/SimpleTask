@@ -92,6 +92,14 @@ public class AdminCommand implements CommandExecutor, TabCompleter {
                 assignTask(sender, args[1], args[2], args[3]);
                 return true;
             }
+            case "remove" -> {
+                if (args.length < 4) {
+                    MessageUtil.send(plugin, sender, "<red>用法: /taskadmin remove <分类> <任务key> <玩家名/all>");
+                    return true;
+                }
+                removeTask(sender, args[1], args[2], args[3]);
+                return true;
+            }
             case "resetreroll" -> {
                 if (args.length < 3) {
                     MessageUtil.send(plugin, sender, "<red>用法: /taskadmin resetreroll <分类> <玩家名/all>");
@@ -145,17 +153,24 @@ public class AdminCommand implements CommandExecutor, TabCompleter {
         }
 
         if (args.length == 1) {
-            String[] subCommands = {"reloadconfig", "reloadfromdb", "import", "list", "delete", "reroll", "rerollall", "assign", "resetreroll", "help"};
+            String[] subCommands = {"reloadconfig", "reloadfromdb", "import", "list", "delete", "reroll", "rerollall", "assign", "remove", "resetreroll", "help"};
             for (String sub : subCommands) {
                 if (sub.toLowerCase().startsWith(args[0].toLowerCase())) {
                     completions.add(sub);
                 }
             }
-        } else if (args.length == 2 && (args[0].equalsIgnoreCase("reroll") || args[0].equalsIgnoreCase("rerollall") || args[0].equalsIgnoreCase("assign") || args[0].equalsIgnoreCase("resetreroll"))) {
+        } else if (args.length == 2 && (args[0].equalsIgnoreCase("reroll") || args[0].equalsIgnoreCase("rerollall") || args[0].equalsIgnoreCase("assign") || args[0].equalsIgnoreCase("remove") || args[0].equalsIgnoreCase("resetreroll"))) {
             // 分类补全
             completions.addAll(plugin.getConfigManager().getTaskCategories().keySet());
         } else if (args.length == 3 && args[0].equalsIgnoreCase("assign")) {
             // assign 命令的任务key补全
+            for (TaskTemplate template : plugin.getTaskManager().getAllTemplates()) {
+                if (template.getTaskKey().toLowerCase().startsWith(args[2].toLowerCase())) {
+                    completions.add(template.getTaskKey());
+                }
+            }
+        } else if (args.length == 3 && args[0].equalsIgnoreCase("remove")) {
+            // remove 命令的任务key补全
             for (TaskTemplate template : plugin.getTaskManager().getAllTemplates()) {
                 if (template.getTaskKey().toLowerCase().startsWith(args[2].toLowerCase())) {
                     completions.add(template.getTaskKey());
@@ -171,6 +186,14 @@ public class AdminCommand implements CommandExecutor, TabCompleter {
             }
         } else if (args.length == 4 && args[0].equalsIgnoreCase("assign")) {
             // assign 命令的玩家名补全
+            completions.add("all");
+            for (Player player : plugin.getServer().getOnlinePlayers()) {
+                if (player.getName().toLowerCase().startsWith(args[3].toLowerCase())) {
+                    completions.add(player.getName());
+                }
+            }
+        } else if (args.length == 4 && args[0].equalsIgnoreCase("remove")) {
+            // remove 命令的玩家名补全
             completions.add("all");
             for (Player player : plugin.getServer().getOnlinePlayers()) {
                 if (player.getName().toLowerCase().startsWith(args[3].toLowerCase())) {
@@ -419,6 +442,67 @@ public class AdminCommand implements CommandExecutor, TabCompleter {
         }
     }
 
+    private void removeTask(CommandSender sender, String categoryId, String taskKey, String target) {
+        // 检查分类是否存在
+        var category = plugin.getConfigManager().getTaskCategory(categoryId);
+        if (category == null) {
+            MessageUtil.send(plugin, sender, "<red>分类不存在: <yellow>{category}",
+                MessageUtil.textPlaceholders("category", categoryId));
+            return;
+        }
+
+        // 检查任务模板是否存在
+        TaskTemplate template = plugin.getTaskManager().getTemplateByKey(taskKey);
+        if (template == null) {
+            MessageUtil.send(plugin, sender, "<red>未找到任务模板: <yellow>{task_key}",
+                MessageUtil.textPlaceholders("task_key", taskKey));
+            return;
+        }
+
+        if (target.equalsIgnoreCase("all")) {
+            List<Player> players = new ArrayList<>(plugin.getServer().getOnlinePlayers());
+            if (players.isEmpty()) {
+                MessageUtil.send(plugin, sender, "<red>当前没有在线玩家");
+                return;
+            }
+
+            AtomicInteger successCount = new AtomicInteger(0);
+            AtomicInteger completedCount = new AtomicInteger(0);
+            int total = players.size();
+
+            for (Player player : players) {
+                plugin.getTaskManager().removePlayerTask(player.getUniqueId(), categoryId, taskKey, success -> {
+                    if (success) {
+                        successCount.incrementAndGet();
+                    }
+                    completedCount.incrementAndGet();
+
+                    if (completedCount.get() == total) {
+                        MessageUtil.send(plugin, sender, "<green>已为 <yellow>{count} <green>名玩家删除任务: <yellow>{task_key}",
+                            MessageUtil.textPlaceholders("count", String.valueOf(successCount.get()), "task_key", taskKey));
+                    }
+                });
+            }
+        } else {
+            Player targetPlayer = plugin.getServer().getPlayerExact(target);
+            if (targetPlayer == null || !targetPlayer.isOnline()) {
+                MessageUtil.send(plugin, sender, "<red>找不到玩家: <yellow>{player}",
+                    MessageUtil.textPlaceholders("player", target));
+                return;
+            }
+
+            plugin.getTaskManager().removePlayerTask(targetPlayer.getUniqueId(), categoryId, taskKey, success -> {
+                if (success) {
+                    MessageUtil.send(plugin, sender, "<green>已为玩家 <yellow>{player} <green>删除任务: <yellow>{task_key}",
+                        MessageUtil.textPlaceholders("player", targetPlayer.getName(), "task_key", taskKey));
+                } else {
+                    MessageUtil.send(plugin, sender, "<yellow>玩家 <yellow>{player} <yellow>没有任务 <gold>{task_key}",
+                        MessageUtil.textPlaceholders("player", targetPlayer.getName(), "task_key", taskKey));
+                }
+            });
+        }
+    }
+
     private void reloadFromDatabase(CommandSender sender) {
         MessageUtil.send(plugin, sender, "<yellow>正在从数据库重新加载模板...");
         plugin.getTaskManager().getTemplateSyncManager().reloadFromDatabase(() -> {
@@ -445,6 +529,7 @@ public class AdminCommand implements CommandExecutor, TabCompleter {
             MessageUtil.send(plugin, sender, "<yellow>/taskadmin reroll <分类> <玩家名/all> <gray>- 重新抽取任务(保留已完成)");
             MessageUtil.send(plugin, sender, "<yellow>/taskadmin rerollall <分类> <玩家名/all> <gray>- 强制刷新所有任务");
             MessageUtil.send(plugin, sender, "<yellow>/taskadmin assign <分类> <任务key> <玩家名/all> <gray>- 给玩家添加指定任务");
+            MessageUtil.send(plugin, sender, "<yellow>/taskadmin remove <分类> <任务key> <玩家名/all> <gray>- 删除玩家的指定任务");
             MessageUtil.send(plugin, sender, "<yellow>/taskadmin resetreroll <分类> <玩家名/all> <gray>- 重置玩家刷新次数");
         } else {
             helpMessages = plugin.getConfigManager().getCommandHelpMessages("admin");
@@ -456,6 +541,7 @@ public class AdminCommand implements CommandExecutor, TabCompleter {
             MessageUtil.send(plugin, sender, "<yellow>/taskadmin reroll <分类> <玩家名/all> <gray>- 重新抽取任务");
             MessageUtil.send(plugin, sender, "<yellow>/taskadmin rerollall <分类> <玩家名/all> <gray>- 强制刷新所有任务");
             MessageUtil.send(plugin, sender, "<yellow>/taskadmin assign <分类> <任务key> <玩家名/all> <gray>- 给玩家添加指定任务");
+            MessageUtil.send(plugin, sender, "<yellow>/taskadmin remove <分类> <任务key> <玩家名/all> <gray>- 删除玩家的指定任务");
             MessageUtil.send(plugin, sender, "<yellow>/taskadmin resetreroll <分类> <玩家名/all> <gray>- 重置玩家刷新次数");
         }
     }

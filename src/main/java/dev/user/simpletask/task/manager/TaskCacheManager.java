@@ -133,4 +133,17 @@ public class TaskCacheManager {
         // 可选：清理已完成通知标记（如果需要）
         // playerCategoryCompletedNotified.remove(uuid);
     }
+
+    /**
+     * 从缓存中移除玩家的指定任务
+     */
+    public void removePlayerTask(UUID uuid, String categoryId, String taskKey) {
+        Map<String, CopyOnWriteArrayList<PlayerTask>> tasksByCategory = playerTasks.get(uuid);
+        if (tasksByCategory == null) return;
+
+        CopyOnWriteArrayList<PlayerTask> tasks = tasksByCategory.get(categoryId);
+        if (tasks == null) return;
+
+        tasks.removeIf(task -> task.getTaskKey().equals(taskKey));
+    }
 }

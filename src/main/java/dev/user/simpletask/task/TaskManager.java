@@ -7,6 +7,7 @@ import dev.user.simpletask.task.manager.*;
 import org.bukkit.entity.Player;
 
 import java.sql.Connection;
+import java.sql.PreparedStatement;
 import java.sql.SQLException;
 import java.util.*;
 import java.util.concurrent.CopyOnWriteArrayList;
@@ -303,6 +304,32 @@ public class TaskManager {
             callback.accept(success);
         }, e -> {
             plugin.getLogger().log(java.util.logging.Level.SEVERE, "Failed to assign task to player: " + player.getName(), e);
+            callback.accept(false);
+        });
+    }
+
+    /**
+     * 删除玩家的指定任务
+     */
+    public void removePlayerTask(UUID uuid, String category, String taskKey, Consumer<Boolean> callback) {
+        plugin.getDatabaseQueue().submit("removePlayerTask", (Connection conn) -> {
+            String sql = "DELETE FROM player_daily_tasks WHERE player_uuid = ? AND category = ? AND task_key = ?";
+            try (PreparedStatement ps = conn.prepareStatement(sql)) {
+                ps.setString(1, uuid.toString());
+                ps.setString(2, category);
+                ps.setString(3, taskKey);
+                return ps.executeUpdate();
+            }
+        }, deletedCount -> {
+            if (deletedCount > 0) {
+                // 从缓存中移除
+                cacheManager.removePlayerTask(uuid, category, taskKey);
+                callback.accept(true);
+            } else {
+                callback.accept(false);
+            }
+        }, e -> {
+            plugin.getLogger().log(java.util.logging.Level.SEVERE, "Failed to remove player task", e);
             callback.accept(false);
         });
     }
