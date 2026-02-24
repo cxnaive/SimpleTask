@@ -3,6 +3,7 @@ package dev.user.simpletask.command;
 import dev.user.simpletask.SimpleTaskPlugin;
 import dev.user.simpletask.gui.AdminTaskGUI;
 import dev.user.simpletask.task.TaskTemplate;
+import dev.user.simpletask.task.category.TaskCategory;
 import dev.user.simpletask.util.MessageUtil;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
@@ -160,8 +161,12 @@ public class AdminCommand implements CommandExecutor, TabCompleter {
                 }
             }
         } else if (args.length == 2 && (args[0].equalsIgnoreCase("reroll") || args[0].equalsIgnoreCase("rerollall") || args[0].equalsIgnoreCase("assign") || args[0].equalsIgnoreCase("remove") || args[0].equalsIgnoreCase("resetreroll"))) {
-            // 分类补全
-            completions.addAll(plugin.getConfigManager().getTaskCategories().keySet());
+            // 分类补全（只显示启用的分类）
+            plugin.getConfigManager().getTaskCategories().values().stream()
+                .filter(TaskCategory::isEnabled)
+                .map(TaskCategory::getId)
+                .filter(id -> id.toLowerCase().startsWith(args[1].toLowerCase()))
+                .forEach(completions::add);
         } else if (args.length == 3 && args[0].equalsIgnoreCase("assign")) {
             // assign 命令的任务key补全
             for (TaskTemplate template : plugin.getTaskManager().getAllTemplates()) {
