@@ -5,7 +5,7 @@ plugins {
 }
 
 group = "dev.user"
-version = "1.0.3"
+version = "1.0.4"
 
 dependencies {
     // Folia API
