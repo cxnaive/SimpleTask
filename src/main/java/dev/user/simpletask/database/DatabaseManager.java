@@ -189,7 +189,7 @@ public class DatabaseManager {
                     "    current_progress INT DEFAULT 0," +
                     "    completed BOOLEAN DEFAULT FALSE," +
                     "    claimed BOOLEAN DEFAULT FALSE," +
-                    "    assigned_at TIMESTAMP NOT NULL," +
+                    "    assigned_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP," +
                     "    task_data TEXT NOT NULL," +
                     "    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP," +
                     "    PRIMARY KEY (player_uuid, task_key, assigned_at)" +

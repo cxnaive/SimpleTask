@@ -355,7 +355,7 @@ public class RerollManager {
                 ps.setString(2, template.getTaskKey());
                 ps.setInt(3, template.getVersion());
                 ps.setString(4, category.getId());
-                ps.setTimestamp(5, java.sql.Timestamp.valueOf(assignedAt));
+                ps.setTimestamp(5, java.sql.Timestamp.from(TimeZoneConfig.toInstant(assignedAt)), TimeZoneConfig.UTC_CALENDAR);
                 ps.setString(6, template.toJson());
                 ps.addBatch();
             }
@@ -380,8 +380,12 @@ public class RerollManager {
             ps.setString(2, categoryId);
             try (ResultSet rs = ps.executeQuery()) {
                 if (rs.next()) {
-                    Timestamp lastResetTs = rs.getTimestamp("last_reset_time");
-                    LocalDateTime lastReset = lastResetTs != null ? lastResetTs.toLocalDateTime() : null;
+                    Timestamp lastResetTs = rs.getTimestamp("last_reset_time", TimeZoneConfig.UTC_CALENDAR);
+                    LocalDateTime lastReset = null;
+                    if (lastResetTs != null) {
+                        java.time.Instant instant = lastResetTs.toInstant();
+                        lastReset = TimeZoneConfig.toLocalDateTime(instant);
+                    }
 
                     if (checkRerollNeedReset(category, lastReset)) {
                         String updateSql = "UPDATE player_category_reroll SET reroll_count = 0, last_reset_time = CURRENT_TIMESTAMP WHERE player_uuid = ? AND category_id = ?";
@@ -443,7 +447,7 @@ public class RerollManager {
             try (PreparedStatement ps = conn.prepareStatement(insertIgnoreSql)) {
                 ps.setString(1, uuid.toString());
                 ps.setString(2, categoryId);
-                ps.setTimestamp(3, Timestamp.valueOf(now));
+                ps.setTimestamp(3, Timestamp.from(TimeZoneConfig.toInstant(now)), TimeZoneConfig.UTC_CALENDAR);
                 ps.executeUpdate();
             }
         } else {
@@ -452,7 +456,7 @@ public class RerollManager {
             try (PreparedStatement ps = conn.prepareStatement(mergeSql)) {
                 ps.setString(1, uuid.toString());
                 ps.setString(2, categoryId);
-                ps.setTimestamp(3, Timestamp.valueOf(now));
+                ps.setTimestamp(3, Timestamp.from(TimeZoneConfig.toInstant(now)), TimeZoneConfig.UTC_CALENDAR);
                 ps.executeUpdate();
             }
         }
@@ -469,8 +473,12 @@ public class RerollManager {
             ps.setString(2, category.getId());
             try (ResultSet rs = ps.executeQuery()) {
                 if (rs.next()) {
-                    Timestamp lastResetTs = rs.getTimestamp("last_reset_time");
-                    LocalDateTime lastReset = lastResetTs != null ? lastResetTs.toLocalDateTime() : null;
+                    Timestamp lastResetTs = rs.getTimestamp("last_reset_time", TimeZoneConfig.UTC_CALENDAR);
+                    LocalDateTime lastReset = null;
+                    if (lastResetTs != null) {
+                        java.time.Instant instant = lastResetTs.toInstant();
+                        lastReset = TimeZoneConfig.toLocalDateTime(instant);
+                    }
 
                     // 使用与任务过期相同的逻辑判断是否需要重置
                     if (checkRerollNeedReset(category, lastReset)) {
@@ -489,7 +497,7 @@ public class RerollManager {
     private void updateRerollCount(Connection conn, UUID uuid, String categoryId, LocalDateTime resetTime, int newRerollCount) throws SQLException {
         String[] columns = {"player_uuid", "category_id", "reroll_count", "last_reset_time"};
         String[] keyColumns = {"player_uuid", "category_id"};
-        Object[] values = {uuid.toString(), categoryId, newRerollCount, Timestamp.valueOf(resetTime)};
+        Object[] values = {uuid.toString(), categoryId, newRerollCount, Timestamp.from(TimeZoneConfig.toInstant(resetTime))};
 
         databaseUtils.executeUpsert(conn, "player_category_reroll", columns, keyColumns, values);
     }
@@ -520,7 +528,7 @@ public class RerollManager {
         plugin.getDatabaseQueue().submit("resetRerollCount", (Connection conn) -> {
             String[] columns = {"player_uuid", "category_id", "reroll_count", "last_reset_time"};
             String[] keyColumns = {"player_uuid", "category_id"};
-            Object[] values = {uuid.toString(), categoryId, 0, Timestamp.valueOf(now)};
+            Object[] values = {uuid.toString(), categoryId, 0, Timestamp.from(TimeZoneConfig.toInstant(now))};
 
             databaseUtils.executeUpsert(conn, "player_category_reroll", columns, keyColumns, values);
             return true;

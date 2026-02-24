@@ -133,12 +133,44 @@ public class TaskManager {
      */
     public void checkAndRefreshPlayerTasksWithReroll(Player player) {
         plugin.getDatabaseQueue().submit("checkAndRefreshWithReroll", (Connection conn) -> {
-            // 1. 先检查并重置所有 reroll 次数
-            rerollManager.checkAndResetAllRerollCounts(conn, player);
+            // 使用事务确保 reroll 重置和任务检查在同一事务中
+            boolean originalAutoCommit = conn.getAutoCommit();
 
-            // 2. 再检查任务过期
-            expireManager.checkAndRefreshPlayerTasks(player);
-            return null;
+            try {
+                if (originalAutoCommit) {
+                    conn.setAutoCommit(false);
+                }
+
+                // 1. 先检查并重置所有 reroll 次数
+                rerollManager.checkAndResetAllRerollCounts(conn, player);
+
+                // 2. 再检查任务过期（使用同步版本，复用同一个连接）
+                expireManager.checkAndRefreshPlayerTasksSync(conn, player);
+
+                // 提交事务
+                if (originalAutoCommit) {
+                    conn.commit();
+                }
+
+                return null;
+            } catch (SQLException e) {
+                if (originalAutoCommit) {
+                    try {
+                        conn.rollback();
+                    } catch (SQLException rollbackEx) {
+                        plugin.getLogger().log(java.util.logging.Level.SEVERE, "Failed to rollback transaction", rollbackEx);
+                    }
+                }
+                throw new RuntimeException("Failed to check and refresh tasks", e);
+            } finally {
+                if (originalAutoCommit) {
+                    try {
+                        conn.setAutoCommit(true);
+                    } catch (SQLException autoCommitEx) {
+                        plugin.getLogger().log(java.util.logging.Level.WARNING, "Failed to restore autoCommit", autoCommitEx);
+                    }
+                }
+            }
         }, null, e -> plugin.getLogger().log(java.util.logging.Level.WARNING, "Failed to check and refresh tasks for player: " + player.getName(), e));
     }
 

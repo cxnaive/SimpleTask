@@ -6,6 +6,7 @@ import dev.user.simpletask.task.TaskTemplate;
 import dev.user.simpletask.task.TaskType;
 import dev.user.simpletask.task.category.TaskCategory;
 import dev.user.simpletask.util.MessageUtil;
+import dev.user.simpletask.util.TimeZoneConfig;
 import net.kyori.adventure.text.Component;
 import org.bukkit.entity.Player;
 import org.bukkit.inventory.ItemStack;
@@ -14,6 +15,7 @@ import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.SQLException;
 import java.sql.Timestamp;
+import java.time.Instant;
 import java.time.LocalDateTime;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
@@ -117,6 +119,10 @@ public class TaskProgressManager {
             String updateSql = "UPDATE player_daily_tasks SET current_progress = ?, completed = ? " +
                 "WHERE player_uuid = ? AND task_key = ? AND assigned_at = ?";
 
+            // 禁用自动提交，确保事务完整性
+            boolean originalAutoCommit = conn.getAutoCommit();
+            conn.setAutoCommit(false);
+
             try (PreparedStatement ps = conn.prepareStatement(updateSql)) {
                 for (Map.Entry<PlayerTask, Integer> entry : tasksToUpdate.entrySet()) {
                     PlayerTask task = entry.getKey();
@@ -127,14 +133,49 @@ public class TaskProgressManager {
                     ps.setBoolean(2, isCompleted);
                     ps.setString(3, uuid.toString());
                     ps.setString(4, task.getTaskKey());
-                    ps.setTimestamp(5, Timestamp.valueOf(task.getAssignedAt()));
+                    // 时区安全：LocalDateTime -> Instant -> Timestamp (使用 UTC Calendar)
+                    Instant instant = TimeZoneConfig.toInstant(task.getAssignedAt());
+                    ps.setTimestamp(5, Timestamp.from(instant), TimeZoneConfig.UTC_CALENDAR);
                     ps.addBatch();
                 }
-                ps.executeBatch();
 
-                // 数据库成功后再更新内存
+                int[] results = ps.executeBatch();
+
+                // 检查每条语句的更新结果，只更新成功的任务到内存
+                List<PlayerTask> successfulUpdates = new ArrayList<>();
+                int index = 0;
                 for (Map.Entry<PlayerTask, Integer> entry : tasksToUpdate.entrySet()) {
-                    entry.getKey().setCurrentProgress(entry.getValue());
+                    PlayerTask task = entry.getKey();
+                    int affectedRows = results[index++];
+                    if (affectedRows > 0) {
+                        successfulUpdates.add(task);
+                    }
+                }
+
+                // 显式提交事务
+                conn.commit();
+
+                // 只更新数据库更新成功的任务的内存
+                for (PlayerTask task : successfulUpdates) {
+                    Integer newProgress = tasksToUpdate.get(task);
+                    if (newProgress != null) {
+                        task.setCurrentProgress(newProgress);
+                    }
+                }
+            } catch (SQLException e) {
+                // 发生异常时回滚事务
+                try {
+                    conn.rollback();
+                } catch (SQLException rollbackEx) {
+                    plugin.getLogger().log(java.util.logging.Level.SEVERE, "Failed to rollback transaction", rollbackEx);
+                }
+                throw e;
+            } finally {
+                // 恢复原来的 autoCommit 状态
+                try {
+                    conn.setAutoCommit(originalAutoCommit);
+                } catch (SQLException autoCommitEx) {
+                    plugin.getLogger().log(java.util.logging.Level.SEVERE, "Failed to restore autoCommit state", autoCommitEx);
                 }
             }
             return null;
@@ -204,7 +245,8 @@ public class TaskProgressManager {
             try (PreparedStatement ps = conn.prepareStatement(sql)) {
                 ps.setString(1, player.getUniqueId().toString());
                 ps.setString(2, task.getTaskKey());
-                ps.setTimestamp(3, Timestamp.valueOf(task.getAssignedAt()));
+                Instant instant = TimeZoneConfig.toInstant(task.getAssignedAt());
+                ps.setTimestamp(3, Timestamp.from(instant), TimeZoneConfig.UTC_CALENDAR);
                 return ps.executeUpdate();
             }
         }, null, e -> plugin.getLogger().log(java.util.logging.Level.SEVERE, "Failed to auto claim reward", e));
@@ -292,7 +334,8 @@ public class TaskProgressManager {
                 ps.setBoolean(2, nowCompleted);
                 ps.setString(3, uuid.toString());
                 ps.setString(4, task.getTaskKey());
-                ps.setTimestamp(5, Timestamp.valueOf(task.getAssignedAt()));
+                Instant instant = TimeZoneConfig.toInstant(task.getAssignedAt());
+                ps.setTimestamp(5, Timestamp.from(instant), TimeZoneConfig.UTC_CALENDAR);
                 int affected = ps.executeUpdate();
                 return affected > 0;
             }
@@ -334,7 +377,8 @@ public class TaskProgressManager {
             try (PreparedStatement ps = conn.prepareStatement(sql)) {
                 ps.setString(1, uuid.toString());
                 ps.setString(2, task.getTaskKey());
-                ps.setTimestamp(3, Timestamp.valueOf(task.getAssignedAt()));
+                Instant instant = TimeZoneConfig.toInstant(task.getAssignedAt());
+                ps.setTimestamp(3, Timestamp.from(instant), TimeZoneConfig.UTC_CALENDAR);
                 return ps.executeUpdate();
             }
         }, affectedRows -> {

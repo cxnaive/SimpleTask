@@ -137,7 +137,7 @@ public class TaskGenerator {
                 ps.setString(4, category.getId());
                 // 时区安全：先将 LocalDateTime 转为 Instant，再存为 Timestamp
                 java.time.Instant instant = TimeZoneConfig.toInstant(assignedAt);
-                ps.setTimestamp(5, java.sql.Timestamp.from(instant));
+                ps.setTimestamp(5, java.sql.Timestamp.from(instant), TimeZoneConfig.UTC_CALENDAR);
                 ps.setString(6, template.toJson());  // 现在包含更新后的 category
                 ps.addBatch();
 

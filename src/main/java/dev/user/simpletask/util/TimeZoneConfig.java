@@ -3,6 +3,8 @@ package dev.user.simpletask.util;
 import dev.user.simpletask.SimpleTaskPlugin;
 
 import java.time.*;
+import java.util.Calendar;
+import java.util.TimeZone;
 
 /**
  * 统一时区管理类
@@ -12,6 +14,12 @@ public class TimeZoneConfig {
 
     private static volatile ZoneId zoneId = ZoneId.systemDefault();
     private static volatile boolean initialized = false;
+
+    /**
+     * UTC Calendar 用于数据库 Timestamp 操作
+     * 确保 JDBC 读写 Timestamp 时时区一致性
+     */
+    public static final Calendar UTC_CALENDAR = Calendar.getInstance(TimeZone.getTimeZone("UTC"));
 
     /**
      * 初始化时区配置

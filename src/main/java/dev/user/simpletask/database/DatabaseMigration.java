@@ -8,8 +8,11 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.sql.Timestamp;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+
+import dev.user.simpletask.util.TimeZoneConfig;
 import java.util.Set;
 import java.util.logging.Level;
 
@@ -243,7 +246,8 @@ public class DatabaseMigration {
                 // 默认使用凌晨4点作为时间
                 LocalDateTime assignedAt = taskDate.atTime(4, 0);
 
-                updatePs.setTimestamp(1, Timestamp.valueOf(assignedAt));
+                // 时区安全：LocalDateTime -> Instant -> Timestamp
+                updatePs.setTimestamp(1, Timestamp.from(TimeZoneConfig.toInstant(assignedAt)), TimeZoneConfig.UTC_CALENDAR);
                 updatePs.setString(2, playerUuid);
                 updatePs.setString(3, taskKey);
                 updatePs.setDate(4, java.sql.Date.valueOf(taskDate));

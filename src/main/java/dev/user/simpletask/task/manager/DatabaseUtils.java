@@ -1,10 +1,12 @@
 package dev.user.simpletask.task.manager;
 
 import dev.user.simpletask.SimpleTaskPlugin;
+import dev.user.simpletask.util.TimeZoneConfig;
 
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.SQLException;
+import java.sql.Timestamp;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.BiConsumer;
@@ -86,6 +88,9 @@ public class DatabaseUtils {
             ps.setDate(index, (java.sql.Date) value);
         } else if (value instanceof Boolean) {
             ps.setBoolean(index, (Boolean) value);
+        } else if (value instanceof Timestamp) {
+            // 使用 UTC Calendar 确保时区一致性
+            ps.setTimestamp(index, (Timestamp) value, TimeZoneConfig.UTC_CALENDAR);
         } else {
             ps.setObject(index, value);
         }

@@ -61,7 +61,7 @@ public class TaskExpireManager {
             for (PlayerTask task : expiredTasks) {
                 ps.setString(1, uuid.toString());
                 ps.setString(2, task.getTaskKey());
-                ps.setTimestamp(3, Timestamp.valueOf(task.getAssignedAt()));
+                ps.setTimestamp(3, Timestamp.from(TimeZoneConfig.toInstant(task.getAssignedAt())), TimeZoneConfig.UTC_CALENDAR);
                 ps.addBatch();
             }
             ps.executeBatch();
@@ -83,6 +83,169 @@ public class TaskExpireManager {
      * @return 刷新结果，包含任务列表和刷新状态
      */
     public CategoryRefreshResult checkAndRefreshCategoryTasks(Connection conn, Player player, TaskCategory category) throws SQLException {
+        UUID uuid = player.getUniqueId();
+        String categoryId = category.getId();
+
+        // 使用事务确保删除和生成的原子性
+        boolean originalAutoCommit = conn.getAutoCommit();
+
+        try {
+            // 如果不在事务中，开启事务
+            if (originalAutoCommit) {
+                conn.setAutoCommit(false);
+            }
+
+            // 1. 加载该分类的任务
+            List<PlayerTask> tasks = loadTasksByCategory(conn, uuid, categoryId);
+
+            // 2. 检测过期任务
+            List<PlayerTask> expiredTasks = tasks.stream()
+                .filter(task -> task.isExpired(category))
+                .toList();
+
+            // 3. 删除过期任务
+            int expiredCount = 0;
+            if (!expiredTasks.isEmpty()) {
+                deleteExpiredTasks(conn, uuid, expiredTasks);
+                tasks.removeAll(expiredTasks);
+                expiredCount = expiredTasks.size();
+                plugin.getLogger().fine("Deleted " + expiredCount + " expired tasks for " + player.getName() + " in category " + categoryId);
+            }
+
+            // 4. 补充新任务
+            int currentCount = tasks.size();
+            int maxCount = category.getMaxConcurrent();
+            int newGeneratedCount = 0;
+
+            if (currentCount < maxCount) {
+                // FIXED 策略：只有在有效期内才生成新任务
+                boolean canGenerate = true;
+                if (category.getExpirePolicy() == ExpirePolicy.FIXED) {
+                    canGenerate = ExpireUtil.isInFixedPeriod(category.getExpirePolicyConfig());
+                }
+
+                if (canGenerate) {
+                    int needToGenerate = maxCount - currentCount;
+                    List<PlayerTask> newTasks = taskGenerator.generateTasksForCategory(conn, player, category, needToGenerate, tasks);
+                    tasks.addAll(newTasks);
+                    newGeneratedCount = newTasks.size();
+                }
+            }
+
+            // 提交事务
+            if (originalAutoCommit) {
+                conn.commit();
+            }
+
+            boolean hasRefreshed = expiredCount > 0 || newGeneratedCount > 0;
+            return new CategoryRefreshResult(tasks, hasRefreshed, expiredCount, newGeneratedCount);
+
+        } catch (SQLException e) {
+            // 回滚事务
+            if (originalAutoCommit) {
+                try {
+                    conn.rollback();
+                } catch (SQLException rollbackEx) {
+                    plugin.getLogger().log(java.util.logging.Level.SEVERE, "Failed to rollback transaction", rollbackEx);
+                }
+            }
+            throw e;
+        } finally {
+            // 恢复 autoCommit 状态
+            if (originalAutoCommit) {
+                try {
+                    conn.setAutoCommit(true);
+                } catch (SQLException autoCommitEx) {
+                    plugin.getLogger().log(java.util.logging.Level.WARNING, "Failed to restore autoCommit", autoCommitEx);
+                }
+            }
+        }
+    }
+
+    /**
+     * 加载并检查玩家所有类别的任务（登录时使用）
+     */
+    public void loadAndCheckPlayerTasks(Connection conn, Player player) throws SQLException {
+        UUID uuid = player.getUniqueId();
+        Map<String, TaskCategory> categories = plugin.getConfigManager().getTaskCategories();
+
+        // 使用事务确保所有分类的刷新操作是原子的
+        boolean originalAutoCommit = conn.getAutoCommit();
+
+        try {
+            if (originalAutoCommit) {
+                conn.setAutoCommit(false);
+            }
+
+            // 初始化各分类的缓存
+            Map<String, CopyOnWriteArrayList<PlayerTask>> tasksByCategory = new ConcurrentHashMap<>();
+
+            // 记录哪些分类有任务被刷新（使用 Component 支持嵌套样式）
+            List<Component> refreshedCategories = new ArrayList<>();
+
+            // 加载每个分类的任务
+            for (String categoryId : categories.keySet()) {
+                TaskCategory category = categories.get(categoryId);
+                if (!category.isEnabled()) continue;
+
+                // 使用公共方法检查并刷新该分类（内部已处理事务，但外层事务会覆盖）
+                CategoryRefreshResult result = checkAndRefreshCategoryTasksInternal(conn, player, category);
+                tasksByCategory.put(categoryId, new CopyOnWriteArrayList<>(result.tasks()));
+
+                // 如果该分类有任务被刷新，记录分类显示名称（解析为 Component）
+                if (result.hasRefreshed()) {
+                    refreshedCategories.add(MessageUtil.parse(category.getDisplayName()));
+                }
+            }
+
+            // 提交事务
+            if (originalAutoCommit) {
+                conn.commit();
+            }
+
+            // 更新缓存
+            cacheManager.updatePlayerTaskCache(uuid, tasksByCategory);
+
+            // 回主线程通知玩家
+            final List<Component> finalRefreshedCategories = refreshedCategories;
+            final Map<String, CopyOnWriteArrayList<PlayerTask>> finalTasksByCategory = tasksByCategory;
+            plugin.getServer().getGlobalRegionScheduler().execute(plugin, () -> {
+                // 检查玩家是否仍然在线
+                if (!player.isOnline()) {
+                    return;
+                }
+
+                int totalTasks = finalTasksByCategory.values().stream().mapToInt(List::size).sum();
+                plugin.getLogger().fine("Loaded " + totalTasks + " tasks for " + player.getName());
+
+                // 如果有任务被刷新，发送通知
+                sendRefreshNotification(player, finalRefreshedCategories);
+            });
+
+        } catch (SQLException e) {
+            if (originalAutoCommit) {
+                try {
+                    conn.rollback();
+                } catch (SQLException rollbackEx) {
+                    plugin.getLogger().log(java.util.logging.Level.SEVERE, "Failed to rollback transaction", rollbackEx);
+                }
+            }
+            throw e;
+        } finally {
+            if (originalAutoCommit) {
+                try {
+                    conn.setAutoCommit(true);
+                } catch (SQLException autoCommitEx) {
+                    plugin.getLogger().log(java.util.logging.Level.WARNING, "Failed to restore autoCommit", autoCommitEx);
+                }
+            }
+        }
+    }
+
+    /**
+     * 内部方法：检查并刷新指定分类的任务（不包含事务处理，由外层调用者管理事务）
+     */
+    private CategoryRefreshResult checkAndRefreshCategoryTasksInternal(Connection conn, Player player, TaskCategory category) throws SQLException {
         UUID uuid = player.getUniqueId();
         String categoryId = category.getId();
 
@@ -128,115 +291,168 @@ public class TaskExpireManager {
     }
 
     /**
-     * 加载并检查玩家所有类别的任务（登录时使用）
+     * 同步版本：检查并刷新指定玩家的所有任务
+     * 由调用者管理事务，用于需要在同一事务中执行多个操作的场景
+     *
+     * @param conn 数据库连接（调用者管理事务）
+     * @param player 玩家
+     * @throws SQLException 数据库异常
      */
-    public void loadAndCheckPlayerTasks(Connection conn, Player player) throws SQLException {
+    public void checkAndRefreshPlayerTasksSync(Connection conn, Player player) throws SQLException {
         UUID uuid = player.getUniqueId();
         Map<String, TaskCategory> categories = plugin.getConfigManager().getTaskCategories();
 
-        // 初始化各分类的缓存
-        Map<String, CopyOnWriteArrayList<PlayerTask>> tasksByCategory = new ConcurrentHashMap<>();
+        Map<String, CopyOnWriteArrayList<PlayerTask>> tasksByCategory = cacheManager.getOrCreatePlayerTaskCache(uuid);
+        boolean hasChanges = false;
+        int totalExpiredCount = 0;
 
-        // 记录哪些分类有任务被刷新（使用 Component 支持嵌套样式）
+        // 记录哪些分类有任务被刷新
         List<Component> refreshedCategories = new ArrayList<>();
 
-        // 加载每个分类的任务
-        for (String categoryId : categories.keySet()) {
-            TaskCategory category = categories.get(categoryId);
+        for (Map.Entry<String, TaskCategory> entry : categories.entrySet()) {
+            String categoryId = entry.getKey();
+            TaskCategory category = entry.getValue();
             if (!category.isEnabled()) continue;
 
-            // 使用公共方法检查并刷新该分类
-            CategoryRefreshResult result = checkAndRefreshCategoryTasks(conn, player, category);
-            tasksByCategory.put(categoryId, new CopyOnWriteArrayList<>(result.tasks()));
+            // 使用内部方法（无事务），由外层统一管理事务
+            CategoryRefreshResult result = checkAndRefreshCategoryTasksInternal(conn, player, category);
+            List<PlayerTask> refreshedTasks = result.tasks();
+            totalExpiredCount += result.expiredCount();
 
-            // 如果该分类有任务被刷新，记录分类显示名称（解析为 Component）
+            // 检查是否有变化
+            List<PlayerTask> currentTasks = cacheManager.getPlayerTasksByCategory(uuid, categoryId);
+            if (hasChanges(refreshedTasks, currentTasks)) {
+                hasChanges = true;
+            }
+
+            // 如果该分类有任务被刷新，记录分类显示名称
             if (result.hasRefreshed()) {
                 refreshedCategories.add(MessageUtil.parse(category.getDisplayName()));
             }
+
+            tasksByCategory.put(categoryId, new CopyOnWriteArrayList<>(refreshedTasks));
         }
 
-        // 更新缓存
-        cacheManager.updatePlayerTaskCache(uuid, tasksByCategory);
+        // 如果有变化，更新缓存并发送通知（异步到主线程）
+        if (hasChanges) {
+            final Map<String, CopyOnWriteArrayList<PlayerTask>> finalTasksByCategory = tasksByCategory;
+            final boolean hasExpiredTasks = totalExpiredCount > 0;
+            final List<Component> finalRefreshedCategories = refreshedCategories;
+            plugin.getServer().getGlobalRegionScheduler().execute(plugin, () -> {
+                // 检查玩家是否仍然在线
+                if (!player.isOnline()) {
+                    // 玩家已离线，清除该玩家的缓存避免内存泄漏
+                    cacheManager.clearPlayerCache(uuid);
+                    return;
+                }
+                // 如果有任务过期，关闭玩家正在打开的GUI
+                if (hasExpiredTasks) {
+                    dev.user.simpletask.gui.GUIManager.closePlayerGUI(uuid);
+                }
+                cacheManager.updatePlayerTaskCache(uuid, finalTasksByCategory);
 
-        // 回主线程通知玩家
-        final List<Component> finalRefreshedCategories = refreshedCategories;
-        plugin.getServer().getGlobalRegionScheduler().execute(plugin, () -> {
-            // 检查玩家是否仍然在线
-            if (!player.isOnline()) {
-                return;
-            }
-
-            int totalTasks = tasksByCategory.values().stream().mapToInt(List::size).sum();
-            plugin.getLogger().fine("Loaded " + totalTasks + " tasks for " + player.getName());
-
-            // 如果有任务被刷新，发送通知
-            sendRefreshNotification(player, finalRefreshedCategories);
-        });
+                // 如果有任务被刷新，发送通知
+                sendRefreshNotification(player, finalRefreshedCategories);
+            });
+        }
     }
 
     /**
      * 检查并刷新指定玩家的所有任务（定时检查、GUI调用使用）
+     * 使用单一事务确保所有分类的刷新操作是原子的
      */
     public void checkAndRefreshPlayerTasks(Player player) {
         UUID uuid = player.getUniqueId();
         Map<String, TaskCategory> categories = plugin.getConfigManager().getTaskCategories();
 
         plugin.getDatabaseQueue().submit("checkAndRefreshPlayerTasks", (conn) -> {
-            Map<String, CopyOnWriteArrayList<PlayerTask>> tasksByCategory = cacheManager.getOrCreatePlayerTaskCache(uuid);
-            boolean hasChanges = false;
-            int totalExpiredCount = 0;
+            // 使用事务
+            boolean originalAutoCommit = conn.getAutoCommit();
 
-            // 记录哪些分类有任务被刷新
-            List<Component> refreshedCategories = new ArrayList<>();
-
-            for (Map.Entry<String, TaskCategory> entry : categories.entrySet()) {
-                String categoryId = entry.getKey();
-                TaskCategory category = entry.getValue();
-                if (!category.isEnabled()) continue;
-
-                // 使用公共方法检查并刷新该分类
-                CategoryRefreshResult result = checkAndRefreshCategoryTasks(conn, player, category);
-                List<PlayerTask> refreshedTasks = result.tasks();
-                totalExpiredCount += result.expiredCount();
-
-                // 检查是否有变化
-                List<PlayerTask> currentTasks = cacheManager.getPlayerTasksByCategory(uuid, categoryId);
-                if (hasChanges(refreshedTasks, currentTasks)) {
-                    hasChanges = true;
+            try {
+                if (originalAutoCommit) {
+                    conn.setAutoCommit(false);
                 }
 
-                // 如果该分类有任务被刷新，记录分类显示名称
-                if (result.hasRefreshed()) {
-                    refreshedCategories.add(MessageUtil.parse(category.getDisplayName()));
+                Map<String, CopyOnWriteArrayList<PlayerTask>> tasksByCategory = cacheManager.getOrCreatePlayerTaskCache(uuid);
+                boolean hasChanges = false;
+                int totalExpiredCount = 0;
+
+                // 记录哪些分类有任务被刷新
+                List<Component> refreshedCategories = new ArrayList<>();
+
+                for (Map.Entry<String, TaskCategory> entry : categories.entrySet()) {
+                    String categoryId = entry.getKey();
+                    TaskCategory category = entry.getValue();
+                    if (!category.isEnabled()) continue;
+
+                    // 使用内部方法（无事务），由外层统一管理事务
+                    CategoryRefreshResult result = checkAndRefreshCategoryTasksInternal(conn, player, category);
+                    List<PlayerTask> refreshedTasks = result.tasks();
+                    totalExpiredCount += result.expiredCount();
+
+                    // 检查是否有变化
+                    List<PlayerTask> currentTasks = cacheManager.getPlayerTasksByCategory(uuid, categoryId);
+                    if (hasChanges(refreshedTasks, currentTasks)) {
+                        hasChanges = true;
+                    }
+
+                    // 如果该分类有任务被刷新，记录分类显示名称
+                    if (result.hasRefreshed()) {
+                        refreshedCategories.add(MessageUtil.parse(category.getDisplayName()));
+                    }
+
+                    tasksByCategory.put(categoryId, new CopyOnWriteArrayList<>(refreshedTasks));
                 }
 
-                tasksByCategory.put(categoryId, new CopyOnWriteArrayList<>(refreshedTasks));
-            }
+                // 提交事务
+                if (originalAutoCommit) {
+                    conn.commit();
+                }
 
-            // 如果有变化，更新缓存并发送通知
-            if (hasChanges) {
-                final Map<String, CopyOnWriteArrayList<PlayerTask>> finalTasksByCategory = tasksByCategory;
-                final boolean hasExpiredTasks = totalExpiredCount > 0;
-                final List<Component> finalRefreshedCategories = refreshedCategories;
-                plugin.getServer().getGlobalRegionScheduler().execute(plugin, () -> {
-                    // 检查玩家是否仍然在线
-                    if (!player.isOnline()) {
-                        // 玩家已离线，清除该玩家的缓存避免内存泄漏
-                        cacheManager.clearPlayerCache(uuid);
-                        return;
+                // 如果有变化，更新缓存并发送通知
+                if (hasChanges) {
+                    final Map<String, CopyOnWriteArrayList<PlayerTask>> finalTasksByCategory = tasksByCategory;
+                    final boolean hasExpiredTasks = totalExpiredCount > 0;
+                    final List<Component> finalRefreshedCategories = refreshedCategories;
+                    plugin.getServer().getGlobalRegionScheduler().execute(plugin, () -> {
+                        // 检查玩家是否仍然在线
+                        if (!player.isOnline()) {
+                            // 玩家已离线，清除该玩家的缓存避免内存泄漏
+                            cacheManager.clearPlayerCache(uuid);
+                            return;
+                        }
+                        // 如果有任务过期，关闭玩家正在打开的GUI
+                        if (hasExpiredTasks) {
+                            dev.user.simpletask.gui.GUIManager.closePlayerGUI(uuid);
+                        }
+                        cacheManager.updatePlayerTaskCache(uuid, finalTasksByCategory);
+
+                        // 如果有任务被刷新，发送通知
+                        sendRefreshNotification(player, finalRefreshedCategories);
+                    });
+                }
+
+                return null;
+
+            } catch (SQLException e) {
+                if (originalAutoCommit) {
+                    try {
+                        conn.rollback();
+                    } catch (SQLException rollbackEx) {
+                        plugin.getLogger().log(java.util.logging.Level.SEVERE, "Failed to rollback transaction", rollbackEx);
                     }
-                    // 如果有任务过期，关闭玩家正在打开的GUI
-                    if (hasExpiredTasks) {
-                        dev.user.simpletask.gui.GUIManager.closePlayerGUI(uuid);
+                }
+                throw new RuntimeException("Failed to refresh player tasks", e);
+            } finally {
+                if (originalAutoCommit) {
+                    try {
+                        conn.setAutoCommit(true);
+                    } catch (SQLException autoCommitEx) {
+                        plugin.getLogger().log(java.util.logging.Level.WARNING, "Failed to restore autoCommit", autoCommitEx);
                     }
-                    cacheManager.updatePlayerTaskCache(uuid, finalTasksByCategory);
-
-                    // 如果有任务被刷新，发送通知
-                    sendRefreshNotification(player, finalRefreshedCategories);
-                });
+                }
             }
-
-            return null;
         }, null, e -> plugin.getLogger().log(java.util.logging.Level.WARNING, "Failed to check and refresh tasks for player: " + player.getName(), e));
     }
 
@@ -325,10 +541,10 @@ public class TaskExpireManager {
         // 优先使用 assigned_at（带时分秒）
         LocalDateTime assignedAt = null;
         try {
-            Timestamp assignedAtTs = rs.getTimestamp("assigned_at");
-            if (assignedAtTs != null) {
-                // 时区安全：先转 Instant，再转配置时区的 LocalDateTime
-                java.time.Instant instant = assignedAtTs.toInstant();
+            // 先获取 Timestamp，再转为 Instant，最后转回配置时区的 LocalDateTime
+            java.sql.Timestamp timestamp = rs.getTimestamp("assigned_at", TimeZoneConfig.UTC_CALENDAR);
+            if (timestamp != null) {
+                java.time.Instant instant = timestamp.toInstant();
                 assignedAt = TimeZoneConfig.toLocalDateTime(instant);
             }
         } catch (SQLException e) {

@@ -321,21 +321,54 @@ public class TemplateSyncManager {
                     """;
             }
 
-            try (PreparedStatement ps = conn.prepareStatement(sql)) {
-                for (TaskTemplate template : templates) {
-                    ps.setString(1, template.getTaskKey());
-                    ps.setInt(2, template.getVersion());
-                    ps.setString(3, template.toJson());
-                    ps.addBatch();
+            // 使用事务确保批量导入的原子性
+            boolean originalAutoCommit = conn.getAutoCommit();
+
+            try {
+                if (originalAutoCommit) {
+                    conn.setAutoCommit(false);
                 }
 
-                ps.executeBatch();
-                plugin.getLogger().info("Imported " + templates.size() + " templates");
+                try (PreparedStatement ps = conn.prepareStatement(sql)) {
+                    for (TaskTemplate template : templates) {
+                        ps.setString(1, template.getTaskKey());
+                        ps.setInt(2, template.getVersion());
+                        ps.setString(3, template.toJson());
+                        ps.addBatch();
+                    }
+
+                    ps.executeBatch();
+
+                    // 提交事务
+                    if (originalAutoCommit) {
+                        conn.commit();
+                    }
+
+                    plugin.getLogger().info("Imported " + templates.size() + " templates");
+                }
 
                 // 重新加载到本地缓存
                 reloadFromDatabase(null);
+
+                return null;
+            } catch (SQLException e) {
+                if (originalAutoCommit) {
+                    try {
+                        conn.rollback();
+                    } catch (SQLException rollbackEx) {
+                        plugin.getLogger().log(Level.SEVERE, "Failed to rollback transaction", rollbackEx);
+                    }
+                }
+                throw e;
+            } finally {
+                if (originalAutoCommit) {
+                    try {
+                        conn.setAutoCommit(true);
+                    } catch (SQLException autoCommitEx) {
+                        plugin.getLogger().log(Level.WARNING, "Failed to restore autoCommit", autoCommitEx);
+                    }
+                }
             }
-            return null;
         }, null, e -> plugin.getLogger().log(Level.SEVERE, "Failed to import templates", e));
     }
 
