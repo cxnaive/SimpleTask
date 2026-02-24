@@ -342,6 +342,7 @@ public class CategoryTaskGUI extends AbstractGUI {
             String targetLabel = switch (taskType) {
                 case KILL, BREED -> "<gray>目标:";
                 case CHAT -> "<gray>关键词:";
+                case COMMAND -> "<gray>命令前缀:";
                 default -> "<gray>目标物品:";
             };
             builder.add(targetLabel);
@@ -374,6 +375,7 @@ public class CategoryTaskGUI extends AbstractGUI {
                 yield MessageUtil.parse("<white><lang:entity.minecraft." + entityId.toLowerCase() + ">");
             }
             case CHAT -> MessageUtil.parse("<yellow>" + targetItem);
+            case COMMAND -> MessageUtil.parse("<green>" + targetItem);
             default -> {
                 ItemStack dummyItem = ItemUtil.createItem(plugin, targetItem, 1);
                 yield dummyItem != null
