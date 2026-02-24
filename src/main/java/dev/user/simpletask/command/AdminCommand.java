@@ -5,6 +5,7 @@ import dev.user.simpletask.gui.AdminTaskGUI;
 import dev.user.simpletask.task.TaskTemplate;
 import dev.user.simpletask.task.category.TaskCategory;
 import dev.user.simpletask.util.MessageUtil;
+import net.kyori.adventure.text.Component;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.CommandSender;
@@ -269,6 +270,11 @@ public class AdminCommand implements CommandExecutor, TabCompleter {
     }
 
     private void rerollAllTasks(CommandSender sender, String categoryId, String target) {
+        TaskCategory category = plugin.getConfigManager().getTaskCategory(categoryId);
+        Component categoryName = category != null
+            ? MessageUtil.parse(category.getDisplayName())
+            : Component.text(categoryId);
+
         if (target.equalsIgnoreCase("all")) {
             int count = plugin.getServer().getOnlinePlayers().size();
             if (count == 0) {
@@ -278,8 +284,10 @@ public class AdminCommand implements CommandExecutor, TabCompleter {
 
             plugin.getTaskManager().forceRerollAllPlayerCategoryTasks(categoryId, true, success -> {
                 if (success) {
-                    MessageUtil.send(plugin, sender, "<green>已为所有在线玩家强制刷新 <yellow>{category}<green> 分类的任务 (<yellow>{count}<green>人)",
-                        MessageUtil.textPlaceholders("category", categoryId, "count", String.valueOf(count)));
+                    MessageUtil.sendAdminWithComponents(plugin, sender, "reroll-success-all",
+                        MessageUtil.componentPlaceholders(
+                            "category", categoryName,
+                            "count", Component.text(count)));
                 } else {
                     MessageUtil.send(plugin, sender, "<red>强制刷新任务失败，请检查数据库连接");
                 }
@@ -287,15 +295,17 @@ public class AdminCommand implements CommandExecutor, TabCompleter {
         } else {
             Player targetPlayer = plugin.getServer().getPlayerExact(target);
             if (targetPlayer == null || !targetPlayer.isOnline()) {
-                MessageUtil.send(plugin, sender, "<red>找不到玩家: <yellow>{player}",
+                MessageUtil.sendAdmin(plugin, sender, "reroll-fail-player-not-found",
                     MessageUtil.textPlaceholders("player", target));
                 return;
             }
 
             plugin.getTaskManager().forceRerollPlayerCategoryTasks(targetPlayer, categoryId, true, success -> {
                 if (success) {
-                    MessageUtil.send(plugin, sender, "<green>已为玩家 <yellow>{player} <green>强制刷新 <yellow>{category}<green> 分类的任务",
-                        MessageUtil.textPlaceholders("player", targetPlayer.getName(), "category", categoryId));
+                    MessageUtil.sendAdminWithComponents(plugin, sender, "reroll-success-player",
+                        MessageUtil.componentPlaceholders(
+                            "player", Component.text(targetPlayer.getName()),
+                            "category", categoryName));
                 } else {
                     MessageUtil.send(plugin, sender, "<red>强制刷新 {player} 的任务失败",
                         MessageUtil.textPlaceholders("player", targetPlayer.getName()));
@@ -305,6 +315,11 @@ public class AdminCommand implements CommandExecutor, TabCompleter {
     }
 
     private void rerollTasks(CommandSender sender, String categoryId, String target) {
+        TaskCategory category = plugin.getConfigManager().getTaskCategory(categoryId);
+        Component categoryName = category != null
+            ? MessageUtil.parse(category.getDisplayName())
+            : Component.text(categoryId);
+
         if (target.equalsIgnoreCase("all")) {
             int count = plugin.getServer().getOnlinePlayers().size();
             if (count == 0) {
@@ -314,8 +329,10 @@ public class AdminCommand implements CommandExecutor, TabCompleter {
 
             plugin.getTaskManager().rerollAllPlayerCategoryTasks(categoryId, true, success -> {
                 if (success) {
-                    MessageUtil.send(plugin, sender, "<green>已为所有在线玩家重新抽取 <yellow>{category}<green> 分类的任务 (<yellow>{count}<green>人)",
-                        MessageUtil.textPlaceholders("category", categoryId, "count", String.valueOf(count)));
+                    MessageUtil.sendAdminWithComponents(plugin, sender, "reroll-success-all",
+                        MessageUtil.componentPlaceholders(
+                            "category", categoryName,
+                            "count", Component.text(count)));
                 } else {
                     MessageUtil.send(plugin, sender, "<red>重新抽取任务失败，请检查数据库连接");
                 }
@@ -323,15 +340,17 @@ public class AdminCommand implements CommandExecutor, TabCompleter {
         } else {
             Player targetPlayer = plugin.getServer().getPlayerExact(target);
             if (targetPlayer == null || !targetPlayer.isOnline()) {
-                MessageUtil.send(plugin, sender, "<red>找不到玩家: <yellow>{player}",
+                MessageUtil.sendAdmin(plugin, sender, "reroll-fail-player-not-found",
                     MessageUtil.textPlaceholders("player", target));
                 return;
             }
 
             plugin.getTaskManager().rerollPlayerCategoryTasks(targetPlayer, categoryId, true, success -> {
                 if (success) {
-                    MessageUtil.send(plugin, sender, "<green>已为玩家 <yellow>{player} <green>重新抽取 <yellow>{category}<green> 分类的任务",
-                        MessageUtil.textPlaceholders("player", targetPlayer.getName(), "category", categoryId));
+                    MessageUtil.sendAdminWithComponents(plugin, sender, "reroll-success-player",
+                        MessageUtil.componentPlaceholders(
+                            "player", Component.text(targetPlayer.getName()),
+                            "category", categoryName));
                 } else {
                     MessageUtil.send(plugin, sender, "<red>重新抽取 {player} 的任务失败",
                         MessageUtil.textPlaceholders("player", targetPlayer.getName()));

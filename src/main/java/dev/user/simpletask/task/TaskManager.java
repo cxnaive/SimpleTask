@@ -4,6 +4,7 @@ import dev.user.simpletask.SimpleTaskPlugin;
 import dev.user.simpletask.task.category.TaskCategory;
 import dev.user.simpletask.util.MessageUtil;
 import dev.user.simpletask.task.manager.*;
+import net.kyori.adventure.text.Component;
 import org.bukkit.entity.Player;
 
 import java.sql.Connection;
@@ -180,8 +181,10 @@ public class TaskManager {
         // Admin 免费刷新（不保留已完成，不检查次数）
         rerollManager.rerollCategoryTasks(player, categoryId, RerollManager.RerollOptions.admin(), (success, message) -> {
             if (notify && success) {
-                MessageUtil.sendConfig(plugin, player, "tasks-refreshed",
-                        MessageUtil.textPlaceholders("category", categoryId));
+                TaskCategory category = plugin.getConfigManager().getTaskCategory(categoryId);
+                Component categoryName = MessageUtil.parse(category != null ? category.getDisplayName() : categoryId);
+                MessageUtil.sendConfigWithComponents(plugin, player, "tasks-refreshed",
+                        MessageUtil.componentPlaceholders("categories", categoryName));
             }
             callback.accept(success);
         });
@@ -201,8 +204,10 @@ public class TaskManager {
         // 使用强制刷新选项（删除所有任务并重新生成）
         rerollManager.rerollCategoryTasks(player, categoryId, RerollManager.RerollOptions.force(), (success, message) -> {
             if (notify && success) {
-                MessageUtil.sendConfig(plugin, player, "tasks-refreshed",
-                        MessageUtil.textPlaceholders("category", categoryId));
+                TaskCategory category = plugin.getConfigManager().getTaskCategory(categoryId);
+                Component categoryName = MessageUtil.parse(category != null ? category.getDisplayName() : categoryId);
+                MessageUtil.sendConfigWithComponents(plugin, player, "tasks-refreshed",
+                        MessageUtil.componentPlaceholders("categories", categoryName));
             }
             callback.accept(success);
         });

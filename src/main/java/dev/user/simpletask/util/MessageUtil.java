@@ -126,6 +126,16 @@ public class MessageUtil {
     }
 
     /**
+     * 发送管理员消息（从 admin. 路径读取，支持组件placeholder）
+     */
+    public static void sendAdminWithComponents(SimpleTaskPlugin plugin, CommandSender sender, String key,
+                                               Map<String, Component> placeholders) {
+        String message = plugin.getConfigManager().getAdminMessage(key);
+        if (message == null || message.isEmpty() || message.equals(key)) return;
+        sendWithComponents(plugin, sender, message, placeholders);
+    }
+
+    /**
      * 发送GUI消息（从 gui. 路径读取）
      */
     public static void sendGui(SimpleTaskPlugin plugin, CommandSender sender, String key) {

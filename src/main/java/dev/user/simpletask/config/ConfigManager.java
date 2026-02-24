@@ -633,7 +633,16 @@ public class ConfigManager {
 
         int targetAmount = section.getInt("target-amount", type.requiresTarget() ? 1 : 1);
         String name = section.getString("name", key); // 任务名称，默认使用 taskKey
-        String description = section.getString("description", "完成任务");
+
+        // 解析描述（支持字符串或列表）
+        List<String> description;
+        if (section.isList("description")) {
+            description = section.getStringList("description");
+        } else {
+            String descStr = section.getString("description", "完成任务");
+            description = descStr != null ? Arrays.asList(descStr) : new ArrayList<>();
+        }
+
         String icon = section.getString("icon", getDefaultIconForType(type));
         int weight = section.getInt("weight", 10);
         String category = section.getString("category", "daily");

@@ -218,18 +218,22 @@ public class CategoryTaskGUI extends AbstractGUI {
     }
 
     private ItemStack createTaskItem(PlayerTask task) {
-        // 解析任务名称和描述
+        // 解析任务名称
         Component taskNameComponent = MessageUtil.parse(task.getTemplate().getName());
-        Component taskDescriptionComponent = MessageUtil.parse(task.getTemplate().getDescription());
 
         // 构建任务名称（根据状态添加颜色前缀和状态标签）
         Component name = buildTaskName(task, taskNameComponent);
 
         // 使用GUIComponentBuilder构建lore
         GUIComponentBuilder loreBuilder = new GUIComponentBuilder()
-            .empty()
-            .add(taskDescriptionComponent)
             .empty();
+
+        // 添加描述（支持多行）
+        for (String descLine : task.getTemplate().getDescription()) {
+            loreBuilder.add(MessageUtil.parse(descLine));
+        }
+
+        loreBuilder.empty();
 
         // 进度信息
         loreBuilder.add(plugin.getConfigManager().getGuiMessage("progress"),

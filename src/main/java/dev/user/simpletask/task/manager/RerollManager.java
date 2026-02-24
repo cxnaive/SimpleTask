@@ -228,7 +228,7 @@ public class RerollManager {
         );
 
         if (needToGenerate <= 0) {
-            return RerollResult.fail(MessageUtil.parse("<red>没有更多可用的任务模板可以刷新"));
+            return RerollResult.fail(MessageUtil.parseConfig(plugin, "reroll-fail-no-templates"));
         }
 
         // 生成新任务

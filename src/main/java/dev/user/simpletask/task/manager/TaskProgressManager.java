@@ -268,10 +268,8 @@ public class TaskProgressManager {
                 ? MessageUtil.parse(category.getDisplayName())
                 : Component.text(categoryId);
 
-            player.sendMessage(Component.text("恭喜！你已完成「")
-                .append(categoryName)
-                .append(Component.text("」的所有任务！"))
-                .color(net.kyori.adventure.text.format.NamedTextColor.GREEN));
+            MessageUtil.sendConfigWithComponents(plugin, player, "all-tasks-completed",
+                MessageUtil.componentPlaceholders("category", categoryName));
         }
     }
 

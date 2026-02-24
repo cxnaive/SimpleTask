@@ -11,6 +11,7 @@ import org.bukkit.inventory.ItemStack;
 
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -27,7 +28,7 @@ public class TaskTemplate {
     private final TaskType type;
     private final List<String> targetItems;
     private final int targetAmount;
-    private final String description;
+    private final List<String> description; // 支持多行描述
     private final String icon;
     private final int weight;
     private final Reward reward;
@@ -51,17 +52,25 @@ public class TaskTemplate {
     public TaskTemplate(String taskKey, String name, TaskType type, String targetItem, int targetAmount,
                         String description, String icon, int weight, Reward reward) {
         this(taskKey, name, type, targetItem != null ? Arrays.asList(targetItem) : new ArrayList<>(),
-                targetAmount, description, icon, weight, reward);
+                targetAmount, description != null ? Collections.singletonList(description) : new ArrayList<>(),
+                icon, weight, reward);
     }
 
     public TaskTemplate(String taskKey, String name, TaskType type, List<String> targetItems, int targetAmount,
                         String description, String icon, int weight, Reward reward) {
+        this(taskKey, name, type, targetItems, targetAmount,
+                description != null ? Collections.singletonList(description) : new ArrayList<>(),
+                icon, weight, reward);
+    }
+
+    public TaskTemplate(String taskKey, String name, TaskType type, List<String> targetItems, int targetAmount,
+                        List<String> description, String icon, int weight, Reward reward) {
         this.taskKey = taskKey;
         this.name = name != null && !name.isEmpty() ? name : taskKey;
         this.type = type;
         this.targetItems = targetItems != null ? new ArrayList<>(targetItems) : new ArrayList<>();
         this.targetAmount = targetAmount;
-        this.description = description;
+        this.description = description != null ? new ArrayList<>(description) : new ArrayList<>();
         this.icon = icon;
         this.weight = weight;
         this.reward = reward;
@@ -97,8 +106,18 @@ public class TaskTemplate {
         return targetAmount;
     }
 
-    public String getDescription() {
-        return description;
+    /**
+     * 获取描述列表（支持多行）
+     */
+    public List<String> getDescription() {
+        return new ArrayList<>(description);
+    }
+
+    /**
+     * 获取第一行描述（向后兼容）
+     */
+    public String getFirstDescription() {
+        return description.isEmpty() ? "" : description.get(0);
     }
 
     public String getIcon() {
@@ -179,6 +198,9 @@ public class TaskTemplate {
             baseMatch = matchesBlockOrItem(targetItem, itemKey);
         } else if (type == TaskType.CHAT) {
             baseMatch = matchesChatMessage(targetItem, itemKey);
+        } else if (type == TaskType.COMMAND) {
+            // 前缀匹配：检查命令是否以 targetItem 开头
+            baseMatch = itemKey.startsWith(targetItem.toLowerCase());
         }
 
         if (!baseMatch) {
@@ -382,7 +404,7 @@ public class TaskTemplate {
         json.addProperty("category", category);
         json.add("targetItems", GSON.toJsonTree(targetItems));
         json.addProperty("targetAmount", targetAmount);
-        json.addProperty("description", description);
+        json.add("description", GSON.toJsonTree(description));
         json.addProperty("icon", icon);
         json.addProperty("weight", weight);
         json.addProperty("version", version);
@@ -419,7 +441,18 @@ public class TaskTemplate {
         }
 
         int targetAmount = json.get("targetAmount").getAsInt();
-        String description = json.get("description").getAsString();
+
+        // 支持新旧格式：description 可以是字符串或数组
+        List<String> description = new ArrayList<>();
+        if (json.has("description") && !json.get("description").isJsonNull()) {
+            var descElement = json.get("description");
+            if (descElement.isJsonArray()) {
+                description = GSON.fromJson(descElement, new TypeToken<List<String>>() {}.getType());
+            } else {
+                description.add(descElement.getAsString());
+            }
+        }
+
         String icon = json.get("icon").getAsString();
         int weight = json.get("weight").getAsInt();
 

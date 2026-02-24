@@ -433,10 +433,6 @@ public class TaskListener implements Listener {
         plugin.getAntiCheatManager().recordBlockPlace(loc);
     }
 
-    private boolean isHarvestableCrop(Block block) {
-        return isHarvestableCrop(block.getType());
-    }
-
     private boolean isHarvestableCrop(Material type) {
         return switch (type) {
             // 带 Ageable 的作物
@@ -506,15 +502,14 @@ public class TaskListener implements Listener {
         taskManager.updateProgress(player, TaskType.BREED, entityKey, 1);
     }
 
-    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = false)
     public void onPlayerCommand(PlayerCommandPreprocessEvent event) {
         Player player = event.getPlayer();
         String fullCommand = event.getMessage();
-
-        // 提取命令名（去除 / 前缀，取第一个空格前的部分）
-        String commandName = fullCommand.substring(1).split(" ")[0].toLowerCase();
+        // 提取完整命令（去除 / 前缀，保留参数用于前缀匹配）
+        String fullCommandName = fullCommand.substring(1).toLowerCase();
 
         // 更新命令任务进度
-        taskManager.updateProgress(player, TaskType.COMMAND, commandName, 1);
+        taskManager.updateProgress(player, TaskType.COMMAND, fullCommandName, 1);
     }
 }

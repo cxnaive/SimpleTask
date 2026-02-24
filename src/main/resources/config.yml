@@ -259,7 +259,6 @@ admin:
   reroll-success-player: "<green>已为玩家 <yellow>{player} <green>重新抽取 <yellow>{category} <green>类别任务"
   reroll-success-all: "<green>已为 <yellow>{count} <green>名玩家重新抽取 <yellow>{category} <green>类别任务"
   reroll-fail-player-not-found: "<red>找不到玩家: <yellow>{player}"
-  reroll-fail-no-templates: "<red>没有可用的任务模板，无法抽取任务"
 
 # 任务类型名称 (用于显示)
 task-types:
@@ -293,10 +292,8 @@ messages:
   task-completed: "<green>恭喜！你完成了任务: <yellow>{task_name}"
   task-completed-auto: "<green>恭喜！你完成了任务: <yellow>{task_name} <green>，奖励已自动发放: <yellow>{reward}"
   task-progress-milestone: "<gray>任务 <yellow>{task_name} <gray>进度: <yellow>{progress}/{target} <gray>({percent}%)"
-  all-tasks-completed: "<green>恭喜！你已完成今日所有任务！"
+  all-tasks-completed: "<green>恭喜！你已完成「{category}」的所有任务！"
   reward-claimed: "<green>已领取奖励: <yellow>{reward}"
-  insufficient-space: "<red>背包空间不足，无法领取奖励！"
-  task-reset: "<yellow>任务已重置，请查收新任务！"
-  progress-update: "<gray>任务进度: <yellow>{current}/{target} <gray>({task_name})"
   task-assigned: "<yellow>管理员给你添加了新任务: <gold>{task_name}"
   tasks-refreshed: "<green>你的 <yellow>{categories} <green>任务已刷新！"
+  reroll-fail-no-templates: "<red>没有更多可用的任务模板可以刷新"

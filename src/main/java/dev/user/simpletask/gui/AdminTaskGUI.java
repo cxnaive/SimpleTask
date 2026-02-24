@@ -117,7 +117,10 @@ public class AdminTaskGUI extends AbstractGUI {
         lore.add(MessageUtil.guiLore("<gray>目标数量: <white>" + template.getTargetAmount()));
         lore.add(MessageUtil.guiLore("<gray>权重: <white>" + template.getWeight()));
         lore.add(Component.empty());
-        lore.add(MessageUtil.guiLore(template.getDescription()));
+        // 添加描述（支持多行）
+        for (String descLine : template.getDescription()) {
+            lore.add(MessageUtil.guiLore(descLine));
+        }
         lore.add(Component.empty());
         lore.add(MessageUtil.guiLore("<green>左键 - 编辑"));
         lore.add(MessageUtil.guiLore("<red>右键 - 删除"));

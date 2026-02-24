@@ -4,10 +4,11 @@
 
 ## 功能特性
 
-- **9种任务类型**: 发言(CHAT)、合成(CRAFT)、钓鱼(FISH)、消耗(CONSUME)、挖掘(BREAK)、收获(HARVEST)、提交(SUBMIT)、击杀(KILL)、繁殖(BREED)
+- **10种任务类型**: 发言(CHAT)、合成(CRAFT)、钓鱼(FISH)、消耗(CONSUME)、挖掘(BREAK)、收获(HARVEST)、提交(SUBMIT)、击杀(KILL)、繁殖(BREED)、命令(COMMAND)
 - **任务分类系统**: 支持 daily/weekly/monthly/limited/permanent 五种任务类别
 - **6种过期策略**: 每日、每周、每月、相对时间、固定时间段、永久
 - **可配置自动领取**: 任务完成后自动发放奖励
+- **多行任务描述**: 支持多行描述，信息展示更丰富
 - **进度追踪**: 实时进度显示，异步数据库操作
 - **奖励系统**: 金币(XConomy)、物品、命令奖励
 - **防刷检测**: 防止玩家通过放置-破坏方块刷挖掘任务进度
@@ -193,6 +194,7 @@ fish_salmon:
 | `/taskadmin reroll <分类> <玩家\|all>` | 重新抽取指定分类任务 | simpletask.admin |
 | `/taskadmin rerollall <分类> <玩家\|all>` | 强制刷新指定分类所有任务 | simpletask.admin |
 | `/taskadmin assign <分类> <任务key> <玩家\|all>` | 给玩家分配指定任务 | simpletask.admin |
+| `/taskadmin remove <分类> <任务key> <玩家\|all>` | 删除玩家的指定任务 | simpletask.admin |
 | `/taskadmin resetreroll <分类> <玩家\|all>` | 重置刷新次数 | simpletask.admin |
 
 ## 任务类型详解
@@ -208,6 +210,7 @@ fish_salmon:
 | SUBMIT | 提交物品 | minecraft:diamond |
 | KILL | 击杀生物 | minecraft:zombie |
 | BREED | 繁殖动物 | minecraft:cow |
+| COMMAND | 执行命令 | "spawn" (前缀匹配) |
 
 ### 多物品匹配
 
@@ -236,6 +239,36 @@ target-amount: 10
 # 任何鱼都计数
 type: FISH
 target-amount: 5
+```
+
+### 命令任务 (COMMAND)
+
+命令任务支持**前缀匹配**，可以匹配带参数的命令：
+
+```yaml
+# 匹配 /spawn
+target-item: "spawn"
+
+# 匹配 /home, /home bed, /home anywhere 等
+target-item: "home"
+
+# 只匹配 /home bed 和 /home bed xxx
+target-item: "home bed"
+```
+
+### 多行任务描述
+
+任务描述支持多行显示：
+
+```yaml
+# 单行描述
+description: "<gray>挖掘10个钻石矿"
+
+# 多行描述
+description:
+  - "<dark_purple>传说中的末影龙"
+  - "<gray>前往末地，击败这个强大的敌人"
+  - "<gold>奖励丰厚，但挑战艰巨！"
 ```
 
 ## 数据库支持
@@ -291,6 +324,15 @@ mine_diamonds:
 - 使用 `/taskadmin reloadfromdb` 可以从数据库重新加载模板到内存（用于多服同步场景）
 
 ## 更新日志
+
+### 1.0.4
+- 新增 COMMAND 任务类型（执行命令），支持前缀匹配多段命令
+- 新增 `/taskadmin remove` 命令删除玩家任务
+- 任务描述支持多行显示
+- GUI 任务列表按 taskKey 字母顺序排序
+- 修复管理员刷新命令消息颜色不显示的问题
+- 修复刷新消息 placeholder 解析错误的问题
+- 优化消息模板配置，清理无用消息
 
 ### 1.0.3
 - 新增任务分类系统（daily/weekly/monthly/limited/permanent）

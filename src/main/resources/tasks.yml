@@ -16,9 +16,9 @@
 #         说明：可以自定义任意类别ID，只要在 config.yml 的 task-categories 中有对应配置即可
 #         预置类别: daily(每日), weekly(周常), monthly(月度), limited(限时), permanent(永久)
 #         自定义示例: festival(节日), event(活动), newbie(新手) 等
-# - target-item/target-items: 目标物品/关键词
+# - target-item: 目标物品/关键词（支持单个字符串或列表形式）
 # - target-amount: 目标数量
-# - description: 任务描述
+# - description: 任务描述（支持单个字符串或列表形式，列表时每行单独显示）
 # - icon: GUI图标（可选），支持原版物品和CE物品
 #         示例: "minecraft:diamond", "myce:custom_item"
 # - weight: 抽取权重
@@ -42,7 +42,7 @@
 # - CHAT 任务不支持 NBT 匹配（聊天消息无 NBT 数据）
 
 # 发言任务
-# 支持 target-item 指定关键词，也支持 target-items 列表形式
+# target-item 支持单个关键词或列表形式（列表中任意一个匹配即可）
 
 # 任意发言（不指定 target-item）
 # 示例：带名称和版本号的任务
@@ -210,7 +210,7 @@ craft_stone_tools_10:
   weight: 30
 
 # 钓鱼任务
-# 支持 target-item 指定钓获物品，也支持 target-items 列表形式
+# target-item 支持单个物品ID或列表形式
 
 # 任意鱼类（不指定 target-item）
 fish_any_5:
@@ -573,7 +573,7 @@ harvest_glow_berries_16:
 
 # 提交任务
 # 点击任务图标时扫描背包并提交物品
-# 支持 target-item 或 target-items 指定需要提交的物品
+# target-item 支持单个物品ID或列表形式
 
 # 提交原木
 submit_oak_log_64:
@@ -743,7 +743,7 @@ kill_any_hostile_50:
         amount: 3
   weight: 15
 
-# 击杀末影龙
+# 击杀末影龙（多行描述示例）
 kill_ender_dragon:
   type: KILL
   name: "屠龙者"
@@ -751,7 +751,10 @@ kill_ender_dragon:
   category: "permanent"
   target-item: "minecraft:ender_dragon"
   target-amount: 1
-  description: "<dark_purple>击杀 <light_purple>末影龙"
+  description:
+    - "<dark_purple>传说中的末影龙"
+    - "<gray>前往末地，击败这个强大的敌人"
+    - "<gold>奖励丰厚，但挑战艰巨！"
   icon: "minecraft:dragon_head"
   reward:
     money: 5000.0
@@ -1121,7 +1124,10 @@ consume_custom_food:
 # 命令任务 (COMMAND)
 # ============================================
 # 玩家执行指定命令完成任务
-# target-item: 命令名称（不带 / 前缀，不区分大小写）
+# target-item: 命令（不带 / 前缀，不区分大小写，支持前缀匹配）
+#   - "spawn" 匹配 /spawn
+#   - "home" 匹配 /home, /home bed, /home anywhere 等
+#   - "home bed" 匹配 /home bed, /home bed xxx，但不匹配 /home
 # 支持单个命令或命令列表
 
 # 使用 /spawn 命令
@@ -1144,7 +1150,7 @@ command_teleport:
   name: "传送达人"
   version: 1
   category: daily
-  target-items:
+  target-item:
     - "spawn"
     - "home"
     - "tpa"
@@ -1158,6 +1164,20 @@ command_teleport:
       - item: "minecraft:ender_pearl"
         amount: 3
   weight: 35
+
+# 使用 /home bed 命令（精确匹配子命令）
+command_home_bed:
+  type: COMMAND
+  name: "回家睡觉"
+  version: 1
+  category: daily
+  target-item: "home bed"
+  target-amount: 1
+  description: "<gray>使用 <yellow>/home bed <gray>传送回床边"
+  icon: "minecraft:red_bed"
+  reward:
+    money: 80.0
+  weight: 30
 
 # ============================================
 # NBT匹配配置说明
