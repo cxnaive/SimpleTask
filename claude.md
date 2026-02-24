@@ -102,6 +102,22 @@ TaskManager 作为入口类，委托给专门的管理器：
 ### 4. 任务类型
 CHAT (发言), CRAFT (合成), FISH (钓鱼), CONSUME (消耗), BREAK (挖掘), HARVEST (收获), SUBMIT (提交), KILL (击杀), BREED (繁殖)
 
+#### CRAFT 类型 Shift+点击合成计算
+```java
+// 材料瓶颈：按槽位取最小数量
+int maxCraftableByIngredients = min(所有非空槽位的数量);
+
+// 背包空间瓶颈
+int availableSpace = 空槽位 × maxStackSize + 可堆叠空间;
+int maxCraftableBySpace = availableSpace / singleCraftAmount;
+
+// 实际合成次数
+int actualCrafts = min(maxCraftableByIngredients, maxCraftableBySpace);
+
+// 最终获得数量
+totalAcquired = actualCrafts × singleCraftAmount;
+```
+
 ### 5. 奖励系统
 - **金币奖励**: XConomy 集成
 - **物品奖励**: 支持原版和 CraftEngine 物品，背包满时掉落脚下

@@ -105,14 +105,50 @@ public class TaskListener implements Listener {
             itemKey = "minecraft:" + result.getType().name().toLowerCase();
         }
 
-        // 只处理普通点击的准确数量
-        // 注意：Shift+点击合成时，实际获得的数量取决于背包空间，无法在此事件准确计算
-        // 玩家可以通过普通点击多次合成来准确累计进度，Shift+点击只会计为1次合成
-        int amount = result.getAmount();
+        int singleCraftAmount = result.getAmount();
+        int totalAcquired;
 
-        // 注意：合成结果物品的NBT在CraftItemEvent时还未应用到玩家背包
-        // 这里使用配方结果物品的NBT（如果有）
-        final int finalAmount = amount;
+        if (event.isShiftClick()) {
+            // Shift+点击：计算实际合成数量
+
+            // 1. 计算合成矩阵中的材料瓶颈（按槽位取最小）
+            int maxCraftableByIngredients = Integer.MAX_VALUE;
+            for (ItemStack item : event.getInventory().getMatrix()) {
+                if (item != null && item.getType() != Material.AIR) {
+                    maxCraftableByIngredients = Math.min(maxCraftableByIngredients, item.getAmount());
+                }
+            }
+            if (maxCraftableByIngredients == Integer.MAX_VALUE) {
+                maxCraftableByIngredients = 1;
+            }
+
+            // 2. 计算玩家背包还能装下多少个该物品
+            int availableSpace = 0;
+            for (ItemStack item : player.getInventory().getStorageContents()) {
+                if (item == null || item.getType() == Material.AIR) {
+                    // 空槽位可以放满一整组
+                    availableSpace += result.getMaxStackSize();
+                } else if (item.isSimilar(result)) {
+                    // 相似物品可以堆叠，计算剩余空间
+                    availableSpace += (result.getMaxStackSize() - item.getAmount());
+                }
+            }
+
+            // 3. 计算实际合成的次数
+            // 将可用空间除以单次产出量，得出背包能承受的合成次数
+            int maxCraftableBySpace = availableSpace / singleCraftAmount;
+            int actualCrafts = Math.min(maxCraftableByIngredients, maxCraftableBySpace);
+
+            // 4. 最终实际获得的物品总数
+            totalAcquired = actualCrafts * singleCraftAmount;
+        } else {
+            // 普通点击合成
+            totalAcquired = singleCraftAmount;
+        }
+
+        if (totalAcquired <= 0) return;
+
+        final int finalAmount = totalAcquired;
         final String finalItemKey = itemKey;
         final ItemStack finalResult = result.clone();
 
