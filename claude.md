@@ -111,6 +111,32 @@ CHAT (发言), CRAFT (合成), FISH (钓鱼), CONSUME (消耗), BREAK (挖掘), 
 ### 6. 时区支持
 - 统一使用 TimeZoneConfig 管理时区
 - FIXED 策略支持本地时间格式（如 `2026-03-01T00:00:00`）
+- **数据库 Timestamp 操作必须使用 UTC_CALENDAR**：
+  ```java
+  // 写入
+  ps.setTimestamp(index, Timestamp.from(TimeZoneConfig.toInstant(localDateTime)), TimeZoneConfig.UTC_CALENDAR);
+  // 读取
+  Timestamp ts = rs.getTimestamp("column", TimeZoneConfig.UTC_CALENDAR);
+  LocalDateTime ldt = TimeZoneConfig.toLocalDateTime(ts.toInstant());
+  ```
+
+### 7. 事务管理
+- 所有批量操作必须使用事务确保原子性
+- 事务处理模式：
+  ```java
+  boolean originalAutoCommit = conn.getAutoCommit();
+  try {
+      if (originalAutoCommit) conn.setAutoCommit(false);
+      // 批量操作...
+      if (originalAutoCommit) conn.commit();
+  } catch (SQLException e) {
+      if (originalAutoCommit) conn.rollback();
+      throw e;
+  } finally {
+      if (originalAutoCommit) conn.setAutoCommit(true);
+  }
+  ```
+- 关键方法已有事务：TaskProgressManager.updateTaskProgressBatch(), TaskExpireManager.*(), RerollManager.doReroll(), TemplateSyncManager.importTemplates()
 
 ## 配置文件说明
 
@@ -199,11 +225,12 @@ player_daily_tasks:
   - player_uuid, task_key, assigned_at (PK)
   - category, task_version, current_progress
   - completed, claimed, task_data (JSON)
+  - 注意: assigned_at 必须有 DEFAULT CURRENT_TIMESTAMP，避免 MySQL 自动添加 ON UPDATE
 
 -- 刷新次数表
 player_category_reroll:
   - player_uuid, category_id (PK)
-  - reroll_count, last_reset_time
+  - reroll_count, last_reset_time (TIMESTAMP)
 
 -- 分类重置记录表
 player_category_reset:
@@ -228,7 +255,7 @@ player_category_reset:
 ```bash
 ./gradlew shadowJar
 ```
-产物：`build/libs/SimpleTask-1.0.3.jar`
+产物：`build/libs/SimpleTask-1.0.4.jar`
 
 ## 部署
 1. 放入 `plugins/` 目录
