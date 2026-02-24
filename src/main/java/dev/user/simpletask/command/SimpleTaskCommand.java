@@ -69,13 +69,13 @@ public class SimpleTaskCommand implements CommandExecutor, TabCompleter {
         }
 
         if (args.length == 1) {
-            // 补全分类名
+            // 补全分类名（只显示启用的分类）
             String input = args[0].toLowerCase();
-            for (String categoryId : plugin.getConfigManager().getTaskCategories().keySet()) {
-                if (categoryId.toLowerCase().startsWith(input)) {
-                    completions.add(categoryId);
-                }
-            }
+            plugin.getConfigManager().getTaskCategories().values().stream()
+                .filter(TaskCategory::isEnabled)
+                .map(TaskCategory::getId)
+                .filter(id -> id.toLowerCase().startsWith(input))
+                .forEach(completions::add);
         }
 
         return completions;
