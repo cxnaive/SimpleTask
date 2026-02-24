@@ -51,7 +51,9 @@ public class CategoryTaskGUI extends AbstractGUI {
     public CategoryTaskGUI(SimpleTaskPlugin plugin, Player player, TaskCategory category, List<PlayerTask> tasks, int usedRerollCount) {
         super(plugin, player, category.getDisplayName(), 54);
         this.category = category;
-        this.tasks = tasks;
+        // 按 taskKey 字母顺序排序
+        this.tasks = new ArrayList<>(tasks);
+        this.tasks.sort((a, b) -> a.getTaskKey().compareToIgnoreCase(b.getTaskKey()));
         this.usedRerollCount = usedRerollCount;
     }
 
