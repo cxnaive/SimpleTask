@@ -110,8 +110,17 @@ public class AdminTaskGUI extends AbstractGUI {
 
         lore.add(MessageUtil.guiLore("<gray>类型: <yellow>" + template.getType().getDisplayName()));
 
-        if (template.getTargetItem() != null) {
-            lore.add(MessageUtil.guiLore("<gray>目标物品: <white>" + template.getTargetItem()));
+        // 显示所有目标物品
+        List<String> targetItems = template.getTargetItems();
+        if (!targetItems.isEmpty()) {
+            if (targetItems.size() == 1) {
+                lore.add(MessageUtil.guiLore("<gray>目标物品: <white>" + targetItems.get(0)));
+            } else {
+                lore.add(MessageUtil.guiLore("<gray>目标物品:"));
+                for (String targetItem : targetItems) {
+                    lore.add(MessageUtil.guiLore("  <dark_gray>• <white>" + targetItem));
+                }
+            }
         }
 
         lore.add(MessageUtil.guiLore("<gray>目标数量: <white>" + template.getTargetAmount()));

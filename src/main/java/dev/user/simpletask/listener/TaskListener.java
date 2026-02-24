@@ -509,6 +509,8 @@ public class TaskListener implements Listener {
         // 提取完整命令（去除 / 前缀，保留参数用于前缀匹配）
         String fullCommandName = fullCommand.substring(1).toLowerCase();
 
+        plugin.getLogger().info("[CommandTask] " + player.getName() + " executed: " + fullCommandName);
+
         // 更新命令任务进度
         taskManager.updateProgress(player, TaskType.COMMAND, fullCommandName, 1);
     }

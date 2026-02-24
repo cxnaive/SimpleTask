@@ -5,7 +5,6 @@ import dev.user.simpletask.task.PlayerTask;
 import dev.user.simpletask.task.TaskTemplate;
 import dev.user.simpletask.task.TaskType;
 import dev.user.simpletask.task.category.TaskCategory;
-import dev.user.simpletask.util.ItemUtil;
 import dev.user.simpletask.util.MessageUtil;
 import net.kyori.adventure.text.Component;
 import org.bukkit.entity.Player;
@@ -93,53 +92,15 @@ public class TaskProgressManager {
 
     /**
      * 检查任务是否匹配给定的类型和目标
-     * 支持NBT条件匹配（CRAFT/FISH/CONSUME/SUBMIT等类型）
+     * 使用 TaskTemplate.matchesTarget 统一处理所有匹配逻辑
      */
     private boolean isTaskMatching(PlayerTask task, TaskType type, String target, ItemStack item) {
         TaskTemplate template = task.getTemplate();
         if (template.getType() != type) return false;
 
-        // 检查目标匹配
-        List<String> taskTargets = template.getTargetItems();
-
-        // 需要物品信息的类型进行NBT匹配检查
-        if (item != null && isNbtMatchingType(type)) {
-            // 如果配置了 target-items，先检查物品key是否在列表中
-            if (taskTargets != null && !taskTargets.isEmpty()) {
-                String itemKey = ItemUtil.getItemKey(item);
-                if (!taskTargets.contains(itemKey)) {
-                    return false;
-                }
-            }
-
-            // 检查NBT条件（如果配置了）
-            if (template.hasNbtMatchConditions()) {
-                // 没有配置target-items时，使用当前物品key进行NBT匹配
-                String itemKey = ItemUtil.getItemKey(item);
-                return ItemUtil.matchesTarget(item, itemKey, template.getNbtMatchConditions());
-            }
-
-            // 通过key检查（或没有配置target-items）且没有NBT条件，匹配成功
-            return true;
-        }
-
-        // 其他类型（非NBT匹配类型）检查目标是否在列表中
-        if (taskTargets == null || taskTargets.isEmpty()) {
-            // 对于非NBT类型，空target-items表示匹配该类型的所有目标
-            return true;
-        }
-        return taskTargets.contains(target);
-    }
-
-    /**
-     * 检查任务类型是否需要NBT匹配
-     * 这些类型在处理时会传入实际的ItemStack用于NBT检查
-     */
-    private boolean isNbtMatchingType(TaskType type) {
-        return switch (type) {
-            case CRAFT, FISH, CONSUME, SUBMIT -> true;
-            default -> false;
-        };
+        // 使用 TaskTemplate 的统一匹配逻辑
+        // 包括：基础匹配、HARVEST/BREAK ID标准化、CHAT包含匹配、COMMAND前缀匹配、NBT匹配
+        return template.matchesTarget(target, item);
     }
 
     /**
