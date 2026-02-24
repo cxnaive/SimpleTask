@@ -149,19 +149,16 @@ public class TaskProgressManager {
                     int affectedRows = results[index++];
                     if (affectedRows > 0) {
                         successfulUpdates.add(task);
+                        // 更新内存
+                        task.setCurrentProgress(entry.getValue());
                     }
                 }
 
                 // 显式提交事务
                 conn.commit();
 
-                // 只更新数据库更新成功的任务的内存
-                for (PlayerTask task : successfulUpdates) {
-                    Integer newProgress = tasksToUpdate.get(task);
-                    if (newProgress != null) {
-                        task.setCurrentProgress(newProgress);
-                    }
-                }
+                // 返回成功更新的任务列表，供回调使用
+                return successfulUpdates;
             } catch (SQLException e) {
                 // 发生异常时回滚事务
                 try {
@@ -178,13 +175,12 @@ public class TaskProgressManager {
                     plugin.getLogger().log(java.util.logging.Level.SEVERE, "Failed to restore autoCommit state", autoCommitEx);
                 }
             }
-            return null;
-        }, result -> {
+        }, successfulUpdates -> {
             // 在数据库操作成功后，在主线程检查完成状态和里程碑
+            // 只处理数据库真正更新的任务，避免重复发放奖励
             plugin.getServer().getGlobalRegionScheduler().execute(plugin, () -> {
-                for (Map.Entry<PlayerTask, Integer> entry : tasksToUpdate.entrySet()) {
-                    PlayerTask task = entry.getKey();
-                    int newProgress = entry.getValue();
+                for (PlayerTask task : successfulUpdates) {
+                    int newProgress = task.getCurrentProgress();
                     int prevProgress = prevProgressMap.get(task);
 
                     if (newProgress >= task.getTargetProgress()) {
