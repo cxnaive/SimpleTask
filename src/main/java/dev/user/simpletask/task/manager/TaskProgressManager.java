@@ -116,8 +116,10 @@ public class TaskProgressManager {
         }
 
         plugin.getDatabaseQueue().submit("updateTaskProgressBatch", (Connection conn) -> {
+            // 添加 AND completed = FALSE 条件，确保已完成的任务不会被重复更新
+            // 这样可以依靠数据库原子性防止重复发放奖励
             String updateSql = "UPDATE player_daily_tasks SET current_progress = ?, completed = ? " +
-                "WHERE player_uuid = ? AND task_key = ? AND assigned_at = ?";
+                "WHERE player_uuid = ? AND task_key = ? AND assigned_at = ? AND completed = FALSE";
 
             // 禁用自动提交，确保事务完整性
             boolean originalAutoCommit = conn.getAutoCommit();
