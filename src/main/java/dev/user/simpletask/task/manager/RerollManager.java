@@ -67,11 +67,14 @@ public class RerollManager {
     /**
      * 验证是否可以刷新
      */
-    private boolean canReroll(TaskCategory category, BiCallback<Boolean, Component> callback) {
-        if (!category.isRerollEnabled() || category.getRerollMaxCount() <= 0) {
-            Component categoryName = MessageUtil.parse(category.getDisplayName());
-            callback.call(false, categoryName.append(MessageUtil.parse(" <red>刷新功能已禁用")));
-            return false;
+    private boolean canReroll(TaskCategory category, RerollOptions options, BiCallback<Boolean, Component> callback) {
+        // 管理员命令跳过 enabled 和 max-count 检查
+        if (!options.isSkipEnabledCheck()) {
+            if (!category.isRerollEnabled() || category.getRerollMaxCount() <= 0) {
+                Component categoryName = MessageUtil.parse(category.getDisplayName());
+                callback.call(false, categoryName.append(MessageUtil.parse(" <red>刷新功能已禁用")));
+                return false;
+            }
         }
         if (templateSyncManager.getAllTemplates().isEmpty()) {
             callback.call(false, MessageUtil.parse("<red>系统错误：没有可用的任务模板，请联系管理员"));
@@ -97,7 +100,7 @@ public class RerollManager {
         if (category == null) return;
 
         // 验证刷新功能是否启用
-        if (!canReroll(category, (success, msg) -> callback.accept(success, msg))) return;
+        if (!canReroll(category, options, (success, msg) -> callback.accept(success, msg))) return;
 
         // 付费模式额外检查
         if (options.isPaid()) {
@@ -599,6 +602,7 @@ public class RerollManager {
         private boolean checkCount = false;    // 是否检查次数限制
         private boolean keepCompleted = false; // 是否保留已完成任务
         private boolean force = false;         // 是否强制刷新（删除所有）
+        private boolean skipEnabledCheck = false; // 是否跳过 enabled 检查（管理员命令）
 
         private RerollOptions() {}
 
@@ -617,12 +621,14 @@ public class RerollManager {
         public static RerollOptions admin() {
             RerollOptions opts = new RerollOptions();
             opts.keepCompleted = true;  // Admin的reroll命令保留已完成任务（只刷新未完成的）
+            opts.skipEnabledCheck = true; // 管理员跳过 enabled 检查
             return opts;
         }
 
         public static RerollOptions force() {
             RerollOptions opts = new RerollOptions();
             opts.force = true;
+            opts.skipEnabledCheck = true; // 管理员跳过 enabled 检查
             return opts;
         }
 
@@ -641,5 +647,6 @@ public class RerollManager {
         public boolean isCheckCount() { return checkCount; }
         public boolean isKeepCompleted() { return keepCompleted; }
         public boolean isForce() { return force; }
+        public boolean isSkipEnabledCheck() { return skipEnabledCheck; }
     }
 }
