@@ -118,11 +118,42 @@ int actualCrafts = min(maxCraftableByIngredients, maxCraftableBySpace);
 totalAcquired = actualCrafts × singleCraftAmount;
 ```
 
+#### HARVEST 类型多层掉落物合并
+BlockDropItemEvent 一次事件可能包含多个掉落物品（如马铃薯一次收获多个），需要合并处理：
+```java
+// 合并相同类型的掉落物，只调用一次 updateProgress
+Map<String, Integer> itemCounts = new HashMap<>();
+for (Item drop : event.getItems()) {
+    String itemKey = ItemUtil.getItemKey(drop.getItemStack());
+    itemCounts.merge(itemKey, drop.getItemStack().getAmount(), Integer::sum);
+}
+// 批量更新，避免多次调用导致重复发放奖励
+for (Map.Entry<String, Integer> entry : itemCounts.entrySet()) {
+    taskManager.updateProgress(player, TaskType.HARVEST, entry.getKey(), sampleItem, entry.getValue());
+}
+```
+
 ### 5. 奖励系统
 - **金币奖励**: XConomy 集成
 - **物品奖励**: 支持原版和 CraftEngine 物品，背包满时掉落脚下
 - **命令奖励**: 支持执行控制台命令
 - **自动领取**: 可配置 auto-claim 自动发放奖励
+
+#### 自动领取原子性保证
+使用数据库 `claimed=FALSE` 条件确保奖励只发放一次：
+```java
+// autoClaimReward 方法
+String sql = "UPDATE player_daily_tasks SET completed = TRUE, claimed = TRUE " +
+    "WHERE player_uuid = ? AND task_key = ? AND assigned_at = ? AND claimed = FALSE";
+// 只有第一个请求能返回 affectedRows > 0
+if (affectedRows > 0) {
+    task.getTemplate().getReward().grant(player, plugin);
+}
+```
+
+#### 重复奖励防护机制（两层保护）
+1. **事件层合并**: HARVEST 等类型在事件处理时合并多个掉落物，只调用一次 updateProgress
+2. **数据库层原子性**: autoClaimReward 使用 `AND claimed=FALSE` 条件，确保即使多次触发也只有一个能成功发放奖励
 
 ### 6. 时区支持
 - 统一使用 TimeZoneConfig 管理时区

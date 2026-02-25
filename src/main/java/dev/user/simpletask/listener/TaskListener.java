@@ -7,6 +7,8 @@ import dev.user.simpletask.util.ItemUtil;
 import org.bukkit.GameMode;
 import org.bukkit.Location;
 import org.bukkit.Material;
+import java.util.HashMap;
+import java.util.Map;
 import org.bukkit.block.Block;
 import org.bukkit.block.BlockState;
 import org.bukkit.block.data.Ageable;
@@ -428,16 +430,26 @@ public class TaskListener implements Listener {
             return;
         }
 
-        // 4. 处理掉落物，按实际掉落物匹配任务
+        // 4. 处理掉落物，按物品类型累加后批量更新（避免多次调用导致重复发放奖励）
+        Map<String, Integer> itemCounts = new HashMap<>();
+        Map<String, ItemStack> itemSamples = new HashMap<>();
+
         for (org.bukkit.entity.Item drop : event.getItems()) {
             ItemStack itemStack = drop.getItemStack();
             String itemKey = ItemUtil.getItemKey(itemStack);
             if (itemKey == null) {
                 itemKey = "minecraft:" + itemStack.getType().name().toLowerCase();
             }
-            int amount = itemStack.getAmount();
+            itemCounts.merge(itemKey, itemStack.getAmount(), Integer::sum);
+            itemSamples.putIfAbsent(itemKey, itemStack);
+        }
 
-            taskManager.updateProgress(player, TaskType.HARVEST, itemKey, itemStack, amount);
+        for (Map.Entry<String, Integer> entry : itemCounts.entrySet()) {
+            String itemKey = entry.getKey();
+            int totalAmount = entry.getValue();
+            ItemStack sampleItem = itemSamples.get(itemKey);
+
+            taskManager.updateProgress(player, TaskType.HARVEST, itemKey, sampleItem, totalAmount);
         }
     }
 
@@ -450,15 +462,25 @@ public class TaskListener implements Listener {
         // 只处理浆果类作物
         if (type != Material.SWEET_BERRY_BUSH && type != Material.CAVE_VINES) return;
 
-        // 处理掉落物
+        // 处理掉落物，按物品类型累加后批量更新（避免多次调用导致重复发放奖励）
+        Map<String, Integer> itemCounts = new HashMap<>();
+        Map<String, ItemStack> itemSamples = new HashMap<>();
+
         for (ItemStack itemStack : event.getItemsHarvested()) {
             String itemKey = ItemUtil.getItemKey(itemStack);
             if (itemKey == null) {
                 itemKey = "minecraft:" + itemStack.getType().name().toLowerCase();
             }
-            int amount = itemStack.getAmount();
+            itemCounts.merge(itemKey, itemStack.getAmount(), Integer::sum);
+            itemSamples.putIfAbsent(itemKey, itemStack);
+        }
 
-            taskManager.updateProgress(player, TaskType.HARVEST, itemKey, itemStack, amount);
+        for (Map.Entry<String, Integer> entry : itemCounts.entrySet()) {
+            String itemKey = entry.getKey();
+            int totalAmount = entry.getValue();
+            ItemStack sampleItem = itemSamples.get(itemKey);
+
+            taskManager.updateProgress(player, TaskType.HARVEST, itemKey, sampleItem, totalAmount);
         }
     }
 

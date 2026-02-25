@@ -223,23 +223,11 @@ public class TaskProgressManager {
      * 自动领取奖励
      */
     private void autoClaimReward(Player player, PlayerTask task) {
-        // 标记已领取
-        task.setClaimed(true);
-
-        // 发放奖励
-        task.getTemplate().getReward().grant(player, plugin);
-
-        // 发送完成+领取消息
-        MessageUtil.sendConfigWithComponents(plugin, player, "task-completed-auto",
-            MessageUtil.componentPlaceholders(
-                "task_name", MessageUtil.parse(task.getTemplate().getDisplayName()),
-                "reward", task.getTemplate().getReward().getDisplayComponent(plugin)
-            ));
-
-        // 更新数据库 claimed 字段
+        // 先尝试在数据库中标记 claimed（原子性保证）
         plugin.getDatabaseQueue().submit("autoClaimReward", (Connection conn) -> {
+            // 添加 AND claimed = FALSE 条件，只有第一个能成功
             String sql = "UPDATE player_daily_tasks SET completed = TRUE, claimed = TRUE " +
-                "WHERE player_uuid = ? AND task_key = ? AND assigned_at = ?";
+                "WHERE player_uuid = ? AND task_key = ? AND assigned_at = ? AND claimed = FALSE";
             try (PreparedStatement ps = conn.prepareStatement(sql)) {
                 ps.setString(1, player.getUniqueId().toString());
                 ps.setString(2, task.getTaskKey());
@@ -247,7 +235,23 @@ public class TaskProgressManager {
                 ps.setTimestamp(3, Timestamp.from(instant), TimeZoneConfig.UTC_CALENDAR);
                 return ps.executeUpdate();
             }
-        }, null, e -> plugin.getLogger().log(java.util.logging.Level.SEVERE, "Failed to auto claim reward", e));
+        }, affectedRows -> {
+            // 只有数据库更新成功（affectedRows > 0）才发放奖励
+            if (affectedRows != null && affectedRows > 0) {
+                // 标记内存
+                task.setClaimed(true);
+
+                // 发放奖励
+                task.getTemplate().getReward().grant(player, plugin);
+
+                // 发送完成+领取消息
+                MessageUtil.sendConfigWithComponents(plugin, player, "task-completed-auto",
+                    MessageUtil.componentPlaceholders(
+                        "task_name", MessageUtil.parse(task.getTemplate().getDisplayName()),
+                        "reward", task.getTemplate().getReward().getDisplayComponent(plugin)
+                    ));
+            }
+        }, e -> plugin.getLogger().log(java.util.logging.Level.SEVERE, "Failed to auto claim reward", e));
     }
 
     /**
