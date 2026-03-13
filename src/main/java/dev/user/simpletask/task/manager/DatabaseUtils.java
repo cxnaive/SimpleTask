@@ -37,12 +37,6 @@ public class DatabaseUtils {
             for (Object value : values) {
                 setParameter(ps, index++, value);
             }
-            // MySQL 需要额外设置 UPDATE 部分的值
-            if (isMySQL) {
-                for (Object value : values) {
-                    setParameter(ps, index++, value);
-                }
-            }
             ps.executeUpdate();
         }
     }
