@@ -140,6 +140,9 @@ public class RerollManager {
             try {
                 int currentRerolls = 0;
                 if (options.isCheckCount()) {
+                    // 先检查并重置过期的 reroll 次数，避免跨周期累积
+                    checkAndResetRerollCount(conn, uuid, category);
+
                     boolean canReroll = incrementRerollCountAtomic(conn, uuid, category, now);
                     if (!canReroll) {
                         return RerollResult.fail(MessageUtil.parse(
