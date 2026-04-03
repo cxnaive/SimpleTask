@@ -30,6 +30,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 public class TaskCategoryGUI extends AbstractGUI {
 
     private final Map<String, List<PlayerTask>> playerTasksByCategory;
+    private final Map<String, Integer> usedRerollsByCategory;
 
     // 对称布局槽位（中间3行，每行最多7个）
     private static final int[] CATEGORY_SLOTS = {
@@ -39,9 +40,11 @@ public class TaskCategoryGUI extends AbstractGUI {
     };
 
     private TaskCategoryGUI(SimpleTaskPlugin plugin, Player player,
-            Map<String, List<PlayerTask>> playerTasksByCategory) {
+            Map<String, List<PlayerTask>> playerTasksByCategory,
+            Map<String, Integer> usedRerollsByCategory) {
         super(plugin, player, plugin.getConfigManager().getGuiTitleTaskCategories(), 54);
         this.playerTasksByCategory = playerTasksByCategory;
+        this.usedRerollsByCategory = usedRerollsByCategory != null ? usedRerollsByCategory : new HashMap<>();
     }
 
     public static void open(SimpleTaskPlugin plugin, Player player) {
@@ -55,7 +58,7 @@ public class TaskCategoryGUI extends AbstractGUI {
 
             if (enabledCategories.isEmpty()) {
                 player.getScheduler().execute(plugin, () -> {
-                    TaskCategoryGUI gui = new TaskCategoryGUI(plugin, player, new HashMap<>());
+                    TaskCategoryGUI gui = new TaskCategoryGUI(plugin, player, new HashMap<>(), new HashMap<>());
                     gui.open();
                 }, () -> {}, 0L);
                 return;
@@ -63,6 +66,7 @@ public class TaskCategoryGUI extends AbstractGUI {
 
             // 并发刷新所有分类
             Map<String, List<PlayerTask>> resultTasks = new ConcurrentHashMap<>();
+            Map<String, Integer> resultRerolls = new ConcurrentHashMap<>();
             AtomicInteger completedCount = new AtomicInteger(0);
             int totalCategories = enabledCategories.size();
 
@@ -70,11 +74,12 @@ public class TaskCategoryGUI extends AbstractGUI {
                 plugin.getTaskManager().checkAndRefreshCategoryTasks(player, category.getId(),
                     (tasks, usedRerolls) -> {
                         resultTasks.put(category.getId(), tasks);
+                        resultRerolls.put(category.getId(), usedRerolls);
 
                         // 检查是否所有分类都完成了
                         if (completedCount.incrementAndGet() == totalCategories) {
                             player.getScheduler().execute(plugin, () -> {
-                                TaskCategoryGUI gui = new TaskCategoryGUI(plugin, player, resultTasks);
+                                TaskCategoryGUI gui = new TaskCategoryGUI(plugin, player, resultTasks, resultRerolls);
                                 gui.open();
                             }, () -> {}, 0L);
                         }
@@ -83,10 +88,11 @@ public class TaskCategoryGUI extends AbstractGUI {
                         plugin.getLogger().warning("Failed to refresh category " + category.getId() + ": " + e.getMessage());
                         // 即使失败也继续，使用空列表
                         resultTasks.put(category.getId(), new ArrayList<>());
+                        resultRerolls.put(category.getId(), 0);
 
                         if (completedCount.incrementAndGet() == totalCategories) {
                             player.getScheduler().execute(plugin, () -> {
-                                TaskCategoryGUI gui = new TaskCategoryGUI(plugin, player, resultTasks);
+                                TaskCategoryGUI gui = new TaskCategoryGUI(plugin, player, resultTasks, resultRerolls);
                                 gui.open();
                             }, () -> {}, 0L);
                         }
@@ -121,7 +127,7 @@ public class TaskCategoryGUI extends AbstractGUI {
                 category.getId(), new ArrayList<>());
 
             // 计算该分类的已使用刷新次数
-            int usedRerolls = calculateUsedRerolls(categoryTasks, category);
+            int usedRerolls = usedRerollsByCategory.getOrDefault(category.getId(), 0);
 
             ItemStack categoryItem = createCategoryItem(category, categoryTasks);
 
@@ -319,16 +325,6 @@ public class TaskCategoryGUI extends AbstractGUI {
         }
         bar.append("<gray>] <yellow>").append(percent).append("%");
         return bar.toString();
-    }
-
-    /**
-     * 计算已使用的刷新次数
-     * 注意：reroll 次数会由 CategoryTaskGUI 自行从数据库获取，这里返回 0 作为默认值
-     */
-    private int calculateUsedRerolls(List<PlayerTask> tasks, TaskCategory category) {
-        // 从预加载的数据无法直接获取 reroll 次数
-        // 传入 -1 让 CategoryTaskGUI 自行查询
-        return -1;
     }
 
     private void setBottomButtons() {
