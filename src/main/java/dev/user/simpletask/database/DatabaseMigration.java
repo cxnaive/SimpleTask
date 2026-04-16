@@ -107,6 +107,13 @@ public class DatabaseMigration {
             }
         }
 
+        // 检查 player_category_reroll.last_reset_time 是否需要修复（MySQL）
+        if (databaseManager.isMySQL() && tableExists(conn, "player_category_reroll")) {
+            if (needsRerollLastResetTimeFix(conn)) {
+                return true;
+            }
+        }
+
         return false;
     }
 
@@ -214,7 +221,34 @@ public class DatabaseMigration {
             }
         }
 
+        // ====== 修复 player_category_reroll.last_reset_time（MySQL）======
+        if (isMySQL && tableExists(conn, "player_category_reroll")) {
+            if (needsRerollLastResetTimeFix(conn)) {
+                fixRerollLastResetTimeColumn(conn);
+            }
+        }
+
         plugin.getLogger().info("Schema migration completed");
+    }
+
+    /**
+     * 修复 player_category_reroll.last_reset_time 的 MySQL 隐式 ON UPDATE CURRENT_TIMESTAMP 行为
+     *
+     * MySQL 在 explicit_defaults_for_timestamp=OFF（默认）时，第一个没有显式 DEFAULT 的 TIMESTAMP 列
+     * 会自动获得 ON UPDATE CURRENT_TIMESTAMP 属性。导致任何 UPDATE 语句都会隐式更新 last_reset_time，
+     * 使得每日重置检查永远判定为"不需要重置"。
+     *
+     * 修复方法：MODIFY COLUMN 添加 DEFAULT CURRENT_TIMESTAMP，消除隐式 ON UPDATE
+     */
+    private void fixRerollLastResetTimeColumn(Connection conn) throws SQLException {
+        plugin.getLogger().info("Fixing player_category_reroll.last_reset_time implicit ON UPDATE behavior...");
+
+        // 修改列定义，显式添加 DEFAULT CURRENT_TIMESTAMP 消除隐式 ON UPDATE
+        String alterSql = "ALTER TABLE player_category_reroll MODIFY COLUMN last_reset_time TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP";
+        try (Statement stmt = conn.createStatement()) {
+            stmt.execute(alterSql);
+            plugin.getLogger().info("Fixed last_reset_time column: removed implicit ON UPDATE CURRENT_TIMESTAMP");
+        }
     }
 
     /**
@@ -338,5 +372,58 @@ public class DatabaseMigration {
             plugin.getLogger().log(Level.WARNING, "Failed to get record count", e);
         }
         return -1;
+    }
+
+    /**
+     * 检查 player_category_reroll.last_reset_time 是否需要修复
+     * 通过 SHOW CREATE TABLE 解析列定义，检测两种问题：
+     * 1. 有隐式 ON UPDATE CURRENT_TIMESTAMP（explicit_defaults_for_timestamp=OFF）
+     * 2. 缺少 DEFAULT CURRENT_TIMESTAMP（列定义不匹配 DDL 规范）
+     */
+    private boolean needsRerollLastResetTimeFix(Connection conn) throws SQLException {
+        try (Statement stmt = conn.createStatement();
+             ResultSet rs = stmt.executeQuery("SHOW CREATE TABLE player_category_reroll")) {
+            if (rs.next()) {
+                String createTable = rs.getString(2);
+                // 查找 last_reset_time 列定义
+                // 预期格式: `last_reset_time` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP
+                for (String line : createTable.split("\n")) {
+                    String trimmed = line.trim();
+                    if (trimmed.startsWith("`last_reset_time`")) {
+                        String lower = trimmed.toLowerCase();
+                        // 检查是否缺少 DEFAULT CURRENT_TIMESTAMP
+                        if (!lower.contains("default current_timestamp")) {
+                            return true;
+                        }
+                        // 检查是否有隐式 ON UPDATE CURRENT_TIMESTAMP
+                        if (lower.contains("on update current_timestamp")) {
+                            return true;
+                        }
+                        return false; // 列定义正确，不需要修复
+                    }
+                }
+            }
+        }
+        return false;
+    }
+
+    /**
+     * 检查 MySQL TIMESTAMP 列是否有隐式 ON UPDATE CURRENT_TIMESTAMP
+     * 通过 information_schema.COLUMNS 的 EXTRA 字段检测
+     */
+    private boolean columnHasImplicitOnUpdate(Connection conn, String table, String column) throws SQLException {
+        String sql = "SELECT EXTRA FROM information_schema.COLUMNS " +
+                "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND COLUMN_NAME = ?";
+        try (PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setString(1, table);
+            ps.setString(2, column);
+            try (ResultSet rs = ps.executeQuery()) {
+                if (rs.next()) {
+                    String extra = rs.getString("EXTRA");
+                    return extra != null && extra.contains("on update CURRENT_TIMESTAMP");
+                }
+            }
+        }
+        return false;
     }
 }

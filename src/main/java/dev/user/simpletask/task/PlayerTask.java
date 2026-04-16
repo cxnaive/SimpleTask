@@ -91,6 +91,16 @@ public class PlayerTask {
         checkCompletion();
     }
 
+    /**
+     * 设置 PAPI 任务的进度值（仅用于显示，不触发完成检查）
+     * PAPI 任务的完成由 PAPIChecker 通过表达式评估判定
+     *
+     * @param progress 当前进度值
+     */
+    public void setPAPIProgress(int progress) {
+        this.currentProgress.set(progress);
+    }
+
     public void addProgress(int amount) {
         int target = template.getTargetAmount();
         this.currentProgress.updateAndGet(current -> Math.min(current + amount, target));
@@ -108,6 +118,16 @@ public class PlayerTask {
 
     public void setCompleted(boolean completed) {
         this.completed.set(completed);
+    }
+
+    /**
+     * 尝试原子性地将任务标记为完成
+     * 使用 CAS 确保只有首次调用返回 true，防止重复完成
+     *
+     * @return 如果是首次标记为完成返回 true，如果已经完成返回 false
+     */
+    public boolean tryMarkCompleted() {
+        return completed.compareAndSet(false, true);
     }
 
     public boolean isClaimed() {

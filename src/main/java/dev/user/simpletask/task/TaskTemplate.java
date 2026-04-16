@@ -165,6 +165,22 @@ public class TaskTemplate {
     }
 
     /**
+     * 获取 PAPI 表达式（仅对 PAPI 类型任务有效）
+     * 将 targetItems 的第一个元素解析为 PAPIExpression
+     *
+     * @return 解析后的 PAPIExpression，如果不是 PAPI 类型或解析失败则返回 null
+     */
+    public PAPIExpression getPAPIExpression() {
+        if (type != TaskType.PAPI) {
+            return null;
+        }
+        if (targetItems == null || targetItems.isEmpty()) {
+            return null;
+        }
+        return PAPIExpression.parse(targetItems.get(0));
+    }
+
+    /**
      * 检查目标是否匹配（支持 NBT 条件）
      * @param itemKey 物品 key
      * @param item 物品实例（用于 NBT 匹配，可为 null）
@@ -174,6 +190,12 @@ public class TaskTemplate {
         if (targetItems == null || targetItems.isEmpty()) {
             return true; // No specific target required
         }
+
+        // PAPI 类型的匹配由 PAPIChecker 处理，这里始终返回 true
+        if (type == TaskType.PAPI) {
+            return true;
+        }
+
         // 遍历所有目标ID，任一匹配即可
         for (String targetItem : targetItems) {
             if (matchesSingleTarget(targetItem, itemKey, item)) {

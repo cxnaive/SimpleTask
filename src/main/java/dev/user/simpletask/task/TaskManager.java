@@ -29,6 +29,7 @@ public class TaskManager {
     private final TaskScheduler taskScheduler;
     private final TaskProgressManager progressManager;
     private final TemplateSyncManager templateSyncManager;
+    private final PAPIChecker papiChecker;
 
     public TaskManager(SimpleTaskPlugin plugin) {
         this.plugin = plugin;
@@ -43,6 +44,7 @@ public class TaskManager {
         this.rerollManager = new RerollManager(plugin, cacheManager, taskGenerator, templateSyncManager);
         this.taskScheduler = new TaskScheduler(plugin);
         this.progressManager = new TaskProgressManager(plugin, cacheManager);
+        this.papiChecker = new PAPIChecker(plugin, cacheManager);
 
         // 启动时从数据库加载模板
         templateSyncManager.loadFromDatabase();
@@ -50,6 +52,11 @@ public class TaskManager {
 
         // 启动定时调度器
         taskScheduler.startAll();
+
+        // 启动 PAPI 检查器（仅在 PAPI 已安装时启动）
+        if (dev.user.simpletask.task.PAPIExpression.isPAPIAvailable()) {
+            papiChecker.start();
+        }
     }
 
     // ==================== 代理方法：缓存管理 ====================
@@ -187,11 +194,14 @@ public class TaskManager {
         }
 
         plugin.getDatabaseQueue().submit("checkAndRefreshCategory", (Connection conn) -> {
-            // 检查并刷新该分类的任务
-            TaskExpireManager.CategoryRefreshResult result = expireManager.checkAndRefreshCategoryTasks(conn, player, category);
+                // 先检查并重置过期的 reroll 次数，避免显示过期累积的次数
+                rerollManager.checkAndResetRerollCount(conn, player.getUniqueId(), category);
 
-            // 获取刷新次数
-            int usedRerolls = rerollManager.getCategoryRerollCount(conn, player.getUniqueId(), category);
+                // 检查并刷新该分类的任务
+                TaskExpireManager.CategoryRefreshResult result = expireManager.checkAndRefreshCategoryTasks(conn, player, category);
+
+                // 获取刷新次数
+                int usedRerolls = rerollManager.getCategoryRerollCount(conn, player.getUniqueId(), category);
 
             return new CategoryRefreshData(result.tasks(), usedRerolls);
         }, result -> {
@@ -302,6 +312,18 @@ public class TaskManager {
         templateSyncManager.deleteTemplate(taskKey, callback);
     }
 
+    public void clearTemplateData(String taskKey, UUID playerUuid, Consumer<Boolean> callback) {
+        templateSyncManager.clearTemplateData(taskKey, playerUuid, callback);
+    }
+
+    public void clearCategoryData(String categoryId, UUID playerUuid, Consumer<Boolean> callback) {
+        templateSyncManager.clearCategoryData(categoryId, playerUuid, callback);
+    }
+
+    public TaskCacheManager getCacheManager() {
+        return cacheManager;
+    }
+
     /**
      * 给指定玩家分配任务到指定分类
      */
@@ -378,6 +400,9 @@ public class TaskManager {
 
         // 停止调度器
         taskScheduler.shutdown();
+
+        // 停止 PAPI 检查器
+        papiChecker.shutdown();
 
         // 停止模板同步
         templateSyncManager.stopPeriodicSync();

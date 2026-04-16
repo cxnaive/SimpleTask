@@ -192,6 +192,13 @@ task-check:
   # 建议值：5-10分钟
   interval-minutes: 1
 
+# PAPI 任务检查设置
+papi-check:
+  # 检查间隔（秒），定期评估在线玩家的 PAPI 占位符表达式
+  # 设置为0表示禁用 PAPI 任务检查
+  # 建议值：15-60秒（太频繁可能影响性能，太慢则响应不及时）
+  interval-seconds: 30
+
 # GUI界面设置
 gui:
   titles:
@@ -236,6 +243,8 @@ commands:
     - "<yellow>/taskadmin reroll <玩家名/all> <类别> <gray>- 重新抽取指定类别任务"
     - "<yellow>/taskadmin rerollall <玩家名/all> <类别> <gray>- 强制刷新指定类别任务"
     - "<yellow>/taskadmin resetreroll <玩家名/all> <类别> <gray>- 重置指定类别刷新次数"
+    - "<yellow>/taskadmin cleardata <任务key> [all|玩家名] <gray>- 清除任务模板及玩家数据"
+    - "<yellow>/taskadmin cleardata-category <分类> [all|玩家名] <gray>- 清除分类所有数据"
     - "<yellow>/taskadmin help <gray>- 显示此帮助"
   unknown-command: "<red>未知命令，使用 <yellow>/taskadmin help <red>查看帮助"
   player-only: "<red>此命令只能由玩家执行"
@@ -272,6 +281,7 @@ task-types:
   KILL: "击杀"
   BREED: "繁殖"
   COMMAND: "命令"
+  PAPI: "条件"
 
 # 通用状态
 status:

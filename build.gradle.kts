@@ -5,7 +5,7 @@ plugins {
 }
 
 group = "dev.user"
-version = "1.0.7"
+version = "1.1.0"
 
 dependencies {
     // Folia API
@@ -21,13 +21,14 @@ dependencies {
     // NBT API
     compileOnly("de.tr7zw:item-nbt-api-plugin:2.15.5")
 
-    // Database (打包进JAR)
-    implementation("com.zaxxer:HikariCP:6.2.1")
-    implementation("com.h2database:h2:2.3.232")
-    implementation("com.mysql:mysql-connector-j:9.2.0")
+    // PlaceholderAPI (软依赖)
+    compileOnly("me.clip:placeholderapi:2.11.6")
 
-    // JSON
-    implementation("com.google.code.gson:gson:2.12.1")
+    // Database & JSON (由服务器通过 plugin.yml libraries 加载)
+    compileOnly("com.zaxxer:HikariCP:6.2.1")
+    compileOnly("com.h2database:h2:2.3.232")
+    compileOnly("com.mysql:mysql-connector-j:9.2.0")
+    compileOnly("com.google.code.gson:gson:2.12.1")
 }
 
 repositories {
@@ -36,6 +37,7 @@ repositories {
     maven("https://jitpack.io")
     maven("https://repo.codemc.io/repository/maven-public/")
     maven("https://repo.momirealms.net/releases/")
+    maven("https://repo.extendedclip.com/content/repositories/placeholderapi/")
 }
 
 java {
@@ -47,17 +49,6 @@ java {
 tasks {
     shadowJar {
         archiveClassifier.set("")
-
-        // 重定位数据库驱动
-        relocate("org.h2", "dev.user.simpletask.libs.org.h2")
-        relocate("com.zaxxer", "dev.user.simpletask.libs.com.zaxxer")
-        relocate("com.mysql", "dev.user.simpletask.libs.com.mysql")
-        relocate("com.google.gson", "dev.user.simpletask.libs.com.google.gson")
-
-        // 合并服务文件 (H2驱动注册)
-        mergeServiceFiles {
-            include("META-INF/services/java.sql.Driver")
-        }
     }
 
     processResources {

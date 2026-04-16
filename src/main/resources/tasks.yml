@@ -1196,3 +1196,73 @@ command_home_bed:
 # - SUBMIT/CRAFT/FISH/CONSUME 任务支持 NBT 匹配
 # - KILL/BREAK/HARVEST/BREED 任务暂时不支持 NBT 匹配（配置会保存但不生效）
 # - CHAT 任务不支持 NBT 匹配（聊天消息无 NBT 数据）
+
+# ============================================
+# PAPI 条件任务
+# ============================================
+# 通过 PlaceholderAPI 占位符表达式判断任务完成
+# 需要安装 PlaceholderAPI 插件才能生效
+#
+# target-item 格式: %placeholder% operator value
+# 支持的操作符: >=, <=, >, <, =
+# 示例:
+#   "%player_level% >= 100"  - 玩家等级达到100
+#   "%xconomy_balance% >= 1000"  - 余额达到1000
+#   "%statistic_player_kills% >= 50"  - 击杀玩家数达到50
+#
+# target-amount 固定为 1（PAPI 任务完成由表达式判定，非累积）
+# 进度显示根据操作符自动选择：
+#   >= / >: 显示当前值/目标值（如 45/100）
+#   <= / <: 显示当前值/目标值（如 3/5）
+#   =: 显示 0/1（布尔值，未完成/已完成）
+
+# 等级新手 - 玩家等级达到10级
+papi_level_10:
+  type: PAPI
+  name: "等级新手"
+  version: 1
+  category: daily
+  target-item: "%player_level% >= 10"
+  target-amount: 1
+  description: "<gray>达到 <yellow>10 <gray>级"
+  icon: "minecraft:experience_bottle"
+  reward:
+    money: 100.0
+    items:
+      - item: "minecraft:experience_bottle"
+        amount: 8
+  weight: 40
+
+# 等级大师 - 玩家等级达到30级（周常）
+papi_level_30:
+  type: PAPI
+  name: "等级大师"
+  version: 1
+  category: weekly
+  target-item: "%player_level% >= 30"
+  target-amount: 1
+  description: "<gray>达到 <yellow>30 <gray>级"
+  icon: "minecraft:experience_bottle"
+  reward:
+    money: 500.0
+    items:
+      - item: "minecraft:golden_apple"
+        amount: 2
+  weight: 30
+
+# 小有积蓄 - 余额达到1000金币
+papi_balance_1000:
+  type: PAPI
+  name: "小有积蓄"
+  version: 1
+  category: daily
+  target-item: "%xconomy_balance% >= 1000"
+  target-amount: 1
+  description: "<gray>持有 <yellow>1000 <gray>金币"
+  icon: "minecraft:gold_ingot"
+  reward:
+    money: 100.0
+    items:
+      - item: "minecraft:gold_ingot"
+        amount: 4
+  weight: 35

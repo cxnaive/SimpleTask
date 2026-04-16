@@ -10,6 +10,7 @@ import java.sql.SQLException;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.logging.Level;
+import java.util.UUID;
 
 /**
  * 模板同步管理器
@@ -386,6 +387,203 @@ public class TemplateSyncManager {
             }
         }, callback, e -> {
             plugin.getLogger().log(Level.SEVERE, "Failed to delete template", e);
+            callback.accept(false);
+        });
+    }
+
+    /**
+     * 清除指定任务模板的所有数据（硬删除模板 + 玩家任务数据）
+     * @param taskKey 任务模板key
+     * @param playerUuid 指定玩家UUID，null表示所有玩家
+     * @param callback 回调
+     */
+    public void clearTemplateData(String taskKey, UUID playerUuid, java.util.function.Consumer<Boolean> callback) {
+        databaseQueue.submit("clearTemplateData", (Connection conn) -> {
+            boolean originalAutoCommit = conn.getAutoCommit();
+            try {
+                if (originalAutoCommit) {
+                    conn.setAutoCommit(false);
+                }
+
+                // 1. 删除玩家任务数据
+                int deletedTasks;
+                if (playerUuid != null) {
+                    try (PreparedStatement ps = conn.prepareStatement(
+                            "DELETE FROM player_daily_tasks WHERE task_key = ? AND player_uuid = ?")) {
+                        ps.setString(1, taskKey);
+                        ps.setString(2, playerUuid.toString());
+                        deletedTasks = ps.executeUpdate();
+                    }
+                } else {
+                    try (PreparedStatement ps = conn.prepareStatement(
+                            "DELETE FROM player_daily_tasks WHERE task_key = ?")) {
+                        ps.setString(1, taskKey);
+                        deletedTasks = ps.executeUpdate();
+                    }
+                }
+
+                // 2. 硬删除模板
+                int deletedTemplates;
+                try (PreparedStatement ps = conn.prepareStatement(
+                        "DELETE FROM task_templates WHERE task_key = ?")) {
+                    ps.setString(1, taskKey);
+                    deletedTemplates = ps.executeUpdate();
+                }
+
+                if (originalAutoCommit) {
+                    conn.commit();
+                }
+
+                plugin.getLogger().info("Cleared template data: " + taskKey
+                    + " (deleted " + deletedTasks + " player tasks, " + deletedTemplates + " templates)");
+                return true;
+            } catch (SQLException e) {
+                if (originalAutoCommit) {
+                    try {
+                        conn.rollback();
+                    } catch (SQLException rollbackEx) {
+                        plugin.getLogger().log(Level.SEVERE, "Failed to rollback transaction", rollbackEx);
+                    }
+                }
+                throw e;
+            } finally {
+                if (originalAutoCommit) {
+                    try {
+                        conn.setAutoCommit(true);
+                    } catch (SQLException autoCommitEx) {
+                        plugin.getLogger().log(Level.WARNING, "Failed to restore autoCommit", autoCommitEx);
+                    }
+                }
+            }
+        }, success -> {
+            if (success) {
+                // 从本地缓存移除模板
+                localTemplates.remove(taskKey);
+                // 清除所有玩家的相关缓存
+                plugin.getTaskManager().getCacheManager().removeTemplateFromAllCaches(taskKey);
+            }
+            callback.accept(success);
+        }, e -> {
+            plugin.getLogger().log(Level.SEVERE, "Failed to clear template data: " + taskKey, e);
+            callback.accept(false);
+        });
+    }
+
+    /**
+     * 清除指定分类的所有数据（硬删除模板 + 玩家任务数据 + reroll/reset数据）
+     * @param categoryId 分类ID
+     * @param playerUuid 指定玩家UUID，null表示所有玩家
+     * @param callback 回调
+     */
+    public void clearCategoryData(String categoryId, UUID playerUuid, java.util.function.Consumer<Boolean> callback) {
+        // 先收集该分类下所有模板的key
+        List<String> templateKeys = localTemplates.values().stream()
+            .filter(t -> categoryId.equals(t.getCategory()))
+            .map(TaskTemplate::getTaskKey)
+            .toList();
+
+        databaseQueue.submit("clearCategoryData", (Connection conn) -> {
+            boolean originalAutoCommit = conn.getAutoCommit();
+            try {
+                if (originalAutoCommit) {
+                    conn.setAutoCommit(false);
+                }
+
+                // 1. 删除玩家任务数据
+                int deletedTasks;
+                if (playerUuid != null) {
+                    try (PreparedStatement ps = conn.prepareStatement(
+                            "DELETE FROM player_daily_tasks WHERE category = ? AND player_uuid = ?")) {
+                        ps.setString(1, categoryId);
+                        ps.setString(2, playerUuid.toString());
+                        deletedTasks = ps.executeUpdate();
+                    }
+                } else {
+                    try (PreparedStatement ps = conn.prepareStatement(
+                            "DELETE FROM player_daily_tasks WHERE category = ?")) {
+                        ps.setString(1, categoryId);
+                        deletedTasks = ps.executeUpdate();
+                    }
+                }
+
+                // 2. 删除该分类的reroll和reset数据
+                if (playerUuid != null) {
+                    try (PreparedStatement ps = conn.prepareStatement(
+                            "DELETE FROM player_category_reroll WHERE category_id = ? AND player_uuid = ?")) {
+                        ps.setString(1, categoryId);
+                        ps.setString(2, playerUuid.toString());
+                        ps.executeUpdate();
+                    }
+                    try (PreparedStatement ps = conn.prepareStatement(
+                            "DELETE FROM player_category_reset WHERE category_id = ? AND player_uuid = ?")) {
+                        ps.setString(1, categoryId);
+                        ps.setString(2, playerUuid.toString());
+                        ps.executeUpdate();
+                    }
+                } else {
+                    try (PreparedStatement ps = conn.prepareStatement(
+                            "DELETE FROM player_category_reroll WHERE category_id = ?")) {
+                        ps.setString(1, categoryId);
+                        ps.executeUpdate();
+                    }
+                    try (PreparedStatement ps = conn.prepareStatement(
+                            "DELETE FROM player_category_reset WHERE category_id = ?")) {
+                        ps.setString(1, categoryId);
+                        ps.executeUpdate();
+                    }
+                }
+
+                // 3. 硬删除该分类下所有模板
+                int deletedTemplates = 0;
+                if (!templateKeys.isEmpty()) {
+                    String placeholders = String.join(",", Collections.nCopies(templateKeys.size(), "?"));
+                    try (PreparedStatement ps = conn.prepareStatement(
+                            "DELETE FROM task_templates WHERE task_key IN (" + placeholders + ")")) {
+                        int index = 1;
+                        for (String key : templateKeys) {
+                            ps.setString(index++, key);
+                        }
+                        deletedTemplates = ps.executeUpdate();
+                    }
+                }
+
+                if (originalAutoCommit) {
+                    conn.commit();
+                }
+
+                plugin.getLogger().info("Cleared category data: " + categoryId
+                    + " (deleted " + deletedTasks + " player tasks, " + deletedTemplates + " templates)");
+                return true;
+            } catch (SQLException e) {
+                if (originalAutoCommit) {
+                    try {
+                        conn.rollback();
+                    } catch (SQLException rollbackEx) {
+                        plugin.getLogger().log(Level.SEVERE, "Failed to rollback transaction", rollbackEx);
+                    }
+                }
+                throw e;
+            } finally {
+                if (originalAutoCommit) {
+                    try {
+                        conn.setAutoCommit(true);
+                    } catch (SQLException autoCommitEx) {
+                        plugin.getLogger().log(Level.WARNING, "Failed to restore autoCommit", autoCommitEx);
+                    }
+                }
+            }
+        }, success -> {
+            if (success) {
+                // 从本地缓存移除该分类的模板
+                for (String key : templateKeys) {
+                    localTemplates.remove(key);
+                }
+                // 清除所有玩家的该分类缓存
+                plugin.getTaskManager().getCacheManager().removeCategoryFromAllCaches(categoryId);
+            }
+            callback.accept(success);
+        }, e -> {
+            plugin.getLogger().log(Level.SEVERE, "Failed to clear category data: " + categoryId, e);
             callback.accept(false);
         });
     }

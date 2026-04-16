@@ -1,10 +1,16 @@
 name: SimpleTask
-version: '1.0.4'
+version: '${version}'
 main: dev.user.simpletask.SimpleTaskPlugin
 api-version: '1.21'
 folia-supported: true
 author: user
 description: A simple daily task system for Folia/Paper servers
+
+libraries:
+  - com.zaxxer:HikariCP:6.2.1
+  - com.h2database:h2:2.3.232
+  - com.mysql:mysql-connector-j:9.2.0
+  - com.google.code.gson:gson:2.12.1
 
 depend:
   - NBTAPI
@@ -12,6 +18,7 @@ depend:
 softdepend:
   - XConomy
   - CraftEngine
+  - PlaceholderAPI
 
 commands:
   task:

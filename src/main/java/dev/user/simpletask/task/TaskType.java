@@ -10,7 +10,8 @@ public enum TaskType {
     SUBMIT(true),       // 提交，需要提交特定物品（点击GUI时扫描背包）
     KILL(true),         // 击杀，需要目标实体类型
     BREED(true),        // 繁殖，需要目标实体类型
-    COMMAND(true);      // 命令，需要执行指定命令
+    COMMAND(true),      // 命令，需要执行指定命令
+    PAPI(true);         // 条件，需要满足PAPI占位符表达式
 
     private final boolean requiresTarget;
 
@@ -34,6 +35,7 @@ public enum TaskType {
             case KILL -> "击杀";
             case BREED -> "繁殖";
             case COMMAND -> "命令";
+            case PAPI -> "条件";
         };
     }
 }

@@ -146,4 +146,29 @@ public class TaskCacheManager {
 
         tasks.removeIf(task -> task.getTaskKey().equals(taskKey));
     }
+
+    /**
+     * 从所有玩家缓存中移除包含指定 taskKey 的任务
+     */
+    public void removeTemplateFromAllCaches(String taskKey) {
+        for (Map.Entry<UUID, Map<String, CopyOnWriteArrayList<PlayerTask>>> entry : playerTasks.entrySet()) {
+            Map<String, CopyOnWriteArrayList<PlayerTask>> tasksByCategory = entry.getValue();
+            for (Map.Entry<String, CopyOnWriteArrayList<PlayerTask>> catEntry : tasksByCategory.entrySet()) {
+                catEntry.getValue().removeIf(task -> task.getTaskKey().equals(taskKey));
+            }
+        }
+    }
+
+    /**
+     * 从所有玩家缓存中移除指定分类的数据
+     */
+    public void removeCategoryFromAllCaches(String categoryId) {
+        for (Map.Entry<UUID, Map<String, CopyOnWriteArrayList<PlayerTask>>> entry : playerTasks.entrySet()) {
+            entry.getValue().remove(categoryId);
+            playerCategoryCompletedNotified.computeIfPresent(entry.getKey(), (k, set) -> {
+                set.remove(categoryId);
+                return set;
+            });
+        }
+    }
 }

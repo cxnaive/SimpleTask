@@ -1,6 +1,7 @@
 package dev.user.simpletask.gui;
 
 import dev.user.simpletask.SimpleTaskPlugin;
+import dev.user.simpletask.task.PAPIExpression;
 import dev.user.simpletask.task.PlayerTask;
 import dev.user.simpletask.task.Reward;
 import dev.user.simpletask.task.TaskTemplate;
@@ -235,12 +236,16 @@ public class CategoryTaskGUI extends AbstractGUI {
 
         loreBuilder.empty();
 
-        // 进度信息
-        loreBuilder.add(plugin.getConfigManager().getGuiMessage("progress"),
-            MessageUtil.textPlaceholders(
-                "current", String.valueOf(task.getCurrentProgress()),
-                "target", String.valueOf(task.getTargetProgress())));
-        loreBuilder.add(task.getProgressBar(20));
+        // 进度信息 - PAPI 类型特殊处理
+        if (task.getTemplate().getType() == TaskType.PAPI) {
+            addPAPIProgressLore(loreBuilder, task);
+        } else {
+            loreBuilder.add(plugin.getConfigManager().getGuiMessage("progress"),
+                MessageUtil.textPlaceholders(
+                    "current", String.valueOf(task.getCurrentProgress()),
+                    "target", String.valueOf(task.getTargetProgress())));
+            loreBuilder.add(task.getProgressBar(20));
+        }
 
         // 奖励信息
         loreBuilder.empty();
@@ -342,6 +347,7 @@ public class CategoryTaskGUI extends AbstractGUI {
             String targetLabel = switch (taskType) {
                 case KILL, BREED -> "<gray>目标:";
                 case CHAT -> "<gray>关键词:";
+                case PAPI -> "<gray>条件:";
                 case COMMAND -> "<gray>命令前缀:";
                 default -> "<gray>目标物品:";
             };
@@ -376,6 +382,10 @@ public class CategoryTaskGUI extends AbstractGUI {
             }
             case CHAT -> MessageUtil.parse("<yellow>" + targetItem);
             case COMMAND -> MessageUtil.parse("<green>" + targetItem);
+            case PAPI -> {
+                PAPIExpression expr = PAPIExpression.parse(targetItem);
+                yield expr != null ? MessageUtil.parse("<aqua>" + expr.getDisplayText()) : MessageUtil.parse("<aqua>" + targetItem);
+            }
             default -> {
                 ItemStack dummyItem = ItemUtil.createItem(plugin, targetItem, 1);
                 yield dummyItem != null
@@ -383,6 +393,71 @@ public class CategoryTaskGUI extends AbstractGUI {
                     : Component.text(targetItem);
             }
         };
+    }
+
+    /**
+     * 添加 PAPI 任务的进度显示
+     * 根据操作符自动选择进度显示方式：
+     * - >= / >: 显示当前值/目标值（如 45/100）
+     * - <= / <: 显示当前值/目标值（如 3/5）
+     * - =: 显示 0/1（未完成）或 1/1（已完成）
+     */
+    private void addPAPIProgressLore(GUIComponentBuilder builder, PlayerTask task) {
+        PAPIExpression expression = task.getTemplate().getPAPIExpression();
+        if (expression == null) {
+            // 表达式解析失败，显示默认进度
+            builder.add(plugin.getConfigManager().getGuiMessage("progress"),
+                MessageUtil.textPlaceholders(
+                    "current", String.valueOf(task.getCurrentProgress()),
+                    "target", String.valueOf(task.getTargetProgress())));
+            return;
+        }
+
+        // PAPI 未安装时显示提示
+        if (!PAPIExpression.isPAPIAvailable()) {
+            builder.add("<red>需安装 PlaceholderAPI");
+            return;
+        }
+
+        String operator = expression.operator();
+        double targetValue = expression.getTargetNumericValue();
+
+        switch (operator) {
+            case ">=", ">", "<=", "<" -> {
+                // 数值比较：显示当前值/目标值
+                double currentValue = expression.getNumericValue(player);
+                String currentStr = currentValue >= 0 ? String.valueOf((int) currentValue) : "?";
+                String targetStr = targetValue >= 0 ? String.valueOf((int) targetValue) : expression.value();
+                builder.add(plugin.getConfigManager().getGuiMessage("progress"),
+                    MessageUtil.textPlaceholders("current", currentStr, "target", targetStr));
+                // 进度条：使用基于表达式语义的百分比，而非 currentProgress/targetAmount
+                if (currentValue >= 0 && targetValue > 0) {
+                    int percent;
+                    if (operator.equals("<=") || operator.equals("<")) {
+                        // <= / < : 当前值越低越接近完成
+                        // 例如: <= 5, 当前值 3 → 已满足条件(100%); 当前值 7 → 未满足(0%)
+                        percent = expression.evaluate(player) ? 100 : (int) Math.max(0, Math.min(99, currentValue / targetValue * 100));
+                    } else {
+                        // >= / > : 当前值越高越接近完成
+                        percent = (int) Math.min(100, currentValue / targetValue * 100);
+                    }
+                    builder.add(buildProgressBar(percent, 20));
+                }
+            }
+            case "=" -> {
+                // 等值比较：布尔显示
+                String statusStr = task.isCompleted() ? "1" : "0";
+                builder.add(plugin.getConfigManager().getGuiMessage("progress"),
+                    MessageUtil.textPlaceholders("current", statusStr, "target", "1"));
+                builder.add(buildProgressBar(task.isCompleted() ? 100 : 0, 20));
+            }
+            default -> {
+                builder.add(plugin.getConfigManager().getGuiMessage("progress"),
+                    MessageUtil.textPlaceholders(
+                        "current", String.valueOf(task.getCurrentProgress()),
+                        "target", String.valueOf(task.getTargetProgress())));
+            }
+        }
     }
 
     /**

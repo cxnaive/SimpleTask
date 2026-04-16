@@ -18,6 +18,7 @@ import java.time.Duration;
 import java.time.LocalTime;
 import java.time.format.DateTimeParseException;
 import java.util.*;
+import java.util.Comparator;
 
 public class ConfigManager {
 
@@ -25,11 +26,14 @@ public class ConfigManager {
     private FileConfiguration config;
     private FileConfiguration tasksConfig;
     private File tasksFile;
+    private final List<FileConfiguration> extraTaskConfigs = new ArrayList<>();
+    private final List<File> extraTaskFiles = new ArrayList<>();
 
     // Template sync settings
     private int templateSyncInterval;
 
     private int taskCheckIntervalMinutes;
+    private int papiCheckIntervalSeconds;
 
     // Anti-cheat settings
     private boolean antiCheatEnabled;
@@ -71,11 +75,27 @@ public class ConfigManager {
             plugin.saveResource("tasks.yml", false);
         }
         tasksConfig = YamlConfiguration.loadConfiguration(tasksFile);
+
+        // 加载额外的任务文件 tasks_*.yml
+        extraTaskConfigs.clear();
+        extraTaskFiles.clear();
+        File[] extraFiles = plugin.getDataFolder().listFiles((dir, name) ->
+            name.startsWith("tasks_") && name.endsWith(".yml"));
+        if (extraFiles != null) {
+            Arrays.sort(extraFiles, Comparator.comparing(File::getName));
+            for (File file : extraFiles) {
+                FileConfiguration extraConfig = YamlConfiguration.loadConfiguration(file);
+                extraTaskConfigs.add(extraConfig);
+                extraTaskFiles.add(file);
+                plugin.getLogger().info("[Config] Loaded extra task file: " + file.getName());
+            }
+        }
     }
 
     public void loadConfig() {
         this.templateSyncInterval = config.getInt("template.sync-interval", 0); // 0 = disabled
         this.taskCheckIntervalMinutes = config.getInt("task-check.interval-minutes", 5); // 默认5分钟
+        this.papiCheckIntervalSeconds = config.getInt("papi-check.interval-seconds", 30); // 默认30秒
 
         // Anti-cheat settings
         this.antiCheatEnabled = config.getBoolean("anti-cheat.enabled", true);
@@ -347,14 +367,25 @@ public class ConfigManager {
      * 获取 tasks.yml 中的所有任务 key
      */
     public Set<String> getTaskKeysFromConfig() {
-        Set<String> keys = new HashSet<>();
-        // tasks.yml 直接在根级别定义任务
+        Set<String> keys = new LinkedHashSet<>();
+
+        // tasks.yml
         for (String key : tasksConfig.getKeys(false)) {
             if (tasksConfig.isConfigurationSection(key)) {
                 keys.add(key);
             }
         }
-        // 也检查主配置文件的 templates 部分（向后兼容）
+
+        // tasks_*.yml
+        for (FileConfiguration extraConfig : extraTaskConfigs) {
+            for (String key : extraConfig.getKeys(false)) {
+                if (extraConfig.isConfigurationSection(key)) {
+                    keys.add(key);
+                }
+            }
+        }
+
+        // 向后兼容：主配置文件的 templates 部分
         ConfigurationSection section = config.getConfigurationSection("templates");
         if (section != null) {
             keys.addAll(section.getKeys(false));
@@ -392,10 +423,25 @@ public class ConfigManager {
     }
 
     private void loadAllTemplates(List<TaskTemplate> templates) {
-        // 从 tasks.yml 根级别加载
-        for (String key : tasksConfig.getKeys(false)) {
-            if (!tasksConfig.isConfigurationSection(key)) continue;
-            ConfigurationSection templateSection = tasksConfig.getConfigurationSection(key);
+        // 从 tasks.yml 加载
+        loadTemplatesFromConfigSection(tasksConfig, templates);
+
+        // 从 tasks_*.yml 加载
+        for (FileConfiguration extraConfig : extraTaskConfigs) {
+            loadTemplatesFromConfigSection(extraConfig, templates);
+        }
+
+        // 向后兼容：从主配置文件的 templates 部分加载
+        loadAllTemplatesFromConfig(templates);
+    }
+
+    /**
+     * 从 FileConfiguration 的根级别加载所有任务模板
+     */
+    private void loadTemplatesFromConfigSection(FileConfiguration fileConfig, List<TaskTemplate> templates) {
+        for (String key : fileConfig.getKeys(false)) {
+            if (!fileConfig.isConfigurationSection(key)) continue;
+            ConfigurationSection templateSection = fileConfig.getConfigurationSection(key);
             if (templateSection == null) continue;
 
             try {
@@ -430,7 +476,20 @@ public class ConfigManager {
     }
 
     private TaskTemplate loadSingleTemplate(String taskKey) {
-        ConfigurationSection section = tasksConfig.getConfigurationSection(taskKey);
+        // 先在 tasks.yml 中查找
+        TaskTemplate template = loadSingleTemplateFrom(tasksConfig, taskKey);
+        if (template != null) return template;
+
+        // 再在 tasks_*.yml 中查找
+        for (FileConfiguration extraConfig : extraTaskConfigs) {
+            template = loadSingleTemplateFrom(extraConfig, taskKey);
+            if (template != null) return template;
+        }
+        return null;
+    }
+
+    private TaskTemplate loadSingleTemplateFrom(FileConfiguration fileConfig, String taskKey) {
+        ConfigurationSection section = fileConfig.getConfigurationSection(taskKey);
         if (section == null) return null;
 
         try {
@@ -459,6 +518,10 @@ public class ConfigManager {
 
     public int getTaskCheckIntervalMinutes() {
         return taskCheckIntervalMinutes;
+    }
+
+    public int getPapiCheckIntervalSeconds() {
+        return papiCheckIntervalSeconds;
     }
 
     // Anti-cheat settings
@@ -671,6 +734,26 @@ public class ConfigManager {
                     plugin.getLogger().warning("[Config] 任务 '" + key + "' (类型: CHAT) 配置了NBT匹配条件，" +
                         "CHAT任务类型不支持NBT匹配（聊天消息无NBT数据）。配置将被忽略。");
                 }
+                case PAPI -> {
+                    plugin.getLogger().warning("[Config] 任务 '" + key + "' (类型: PAPI) 配置了NBT匹配条件，" +
+                        "PAPI任务类型不支持NBT匹配。配置将被忽略。");
+                }
+            }
+        }
+
+        // PAPI 类型验证
+        if (type == TaskType.PAPI) {
+            if (targetItems.isEmpty()) {
+                plugin.getLogger().warning("[Config] PAPI 任务 '" + key + "' 缺少 target-item（PAPI表达式），任务将无法工作");
+            } else {
+                dev.user.simpletask.task.PAPIExpression expr = dev.user.simpletask.task.PAPIExpression.parse(targetItems.get(0));
+                if (expr == null) {
+                    plugin.getLogger().warning("[Config] PAPI 任务 '" + key + "' 的 target-item 格式无效: " + targetItems.get(0));
+                    plugin.getLogger().warning("[Config] PAPI 表达式格式应为: %placeholder% operator value (如: %player_level% >= 100)");
+                }
+            }
+            if (targetAmount != 1) {
+                plugin.getLogger().info("[Config] PAPI 任务 '" + key + "' 的 target-amount 建议设为 1（PAPI 任务完成度由表达式判定）");
             }
         }
         template.setNbtMatchConditions(nbtMatchConditions);
@@ -690,6 +773,7 @@ public class ConfigManager {
             case KILL -> "minecraft:iron_sword";
             case BREED -> "minecraft:wheat";
             case COMMAND -> "minecraft:command_block";
+            case PAPI -> "minecraft:repeater";
         };
     }
 

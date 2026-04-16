@@ -66,7 +66,7 @@ public class DatabaseManager {
 
         // 注册重定位后的驱动
         try {
-            Driver mysqlDriver = (Driver) Class.forName("dev.user.simpletask.libs.com.mysql.cj.jdbc.Driver", true, plugin.getClass().getClassLoader())
+            Driver mysqlDriver = (Driver) Class.forName("com.mysql.cj.jdbc.Driver", true, plugin.getClass().getClassLoader())
                     .getDeclaredConstructor().newInstance();
             DriverManager.registerDriver(new DriverShim(mysqlDriver));
         } catch (Exception e) {
@@ -82,7 +82,7 @@ public class DatabaseManager {
         config.setConnectionTimeout(10000);
         config.setIdleTimeout(600000);
         config.setMaxLifetime(1800000);
-        config.setDriverClassName("dev.user.simpletask.libs.com.mysql.cj.jdbc.Driver");
+        config.setDriverClassName("com.mysql.cj.jdbc.Driver");
 
         // 添加连接泄漏检测（5分钟）
         config.setLeakDetectionThreshold(300000);
@@ -100,7 +100,7 @@ public class DatabaseManager {
 
         // 注册重定位后的驱动
         try {
-            Driver h2Driver = (Driver) Class.forName("dev.user.simpletask.libs.org.h2.Driver", true, plugin.getClass().getClassLoader())
+            Driver h2Driver = (Driver) Class.forName("org.h2.Driver", true, plugin.getClass().getClassLoader())
                     .getDeclaredConstructor().newInstance();
             DriverManager.registerDriver(new DriverShim(h2Driver));
         } catch (Exception e) {
@@ -113,7 +113,7 @@ public class DatabaseManager {
         config.setPassword("");
         config.setMaximumPoolSize(5);
         config.setMinimumIdle(1);
-        config.setDriverClassName("dev.user.simpletask.libs.org.h2.Driver");
+        config.setDriverClassName("org.h2.Driver");
         config.setConnectionTestQuery("SELECT 1");
 
         // 添加连接泄漏检测（5分钟）
@@ -212,7 +212,7 @@ public class DatabaseManager {
                     "    player_uuid VARCHAR(36) NOT NULL," +
                     "    category_id VARCHAR(32) NOT NULL," +
                     "    reroll_count INT DEFAULT 0," +
-                    "    last_reset_time TIMESTAMP NOT NULL," +
+                    "    last_reset_time TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP," +
                     "    PRIMARY KEY (player_uuid, category_id)" +
                     ")";
             stmt.execute(categoryRerollTable);

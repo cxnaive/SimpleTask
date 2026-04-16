@@ -243,7 +243,8 @@ public class RerollManager {
         insertTasks(conn, uuid, now, category, selectedTasks);
 
         // 注意：刷新次数已由 incrementRerollCountAtomic 原子操作更新
-        int newRerollCount = currentRerolls + 1;
+        // currentRerolls 是递增后的值，直接使用即可
+        int newRerollCount = currentRerolls;
 
         // 构建成功消息
         Component categoryName = MessageUtil.parse(category.getDisplayName());
@@ -391,10 +392,14 @@ public class RerollManager {
                     }
 
                     if (checkRerollNeedReset(category, lastReset)) {
-                        String updateSql = "UPDATE player_category_reroll SET reroll_count = 0, last_reset_time = CURRENT_TIMESTAMP WHERE player_uuid = ? AND category_id = ?";
+                        // 使用 Java 端计算的配置时区时间，而非 CURRENT_TIMESTAMP
+                        // 避免数据库服务器时区与插件配置时区不一致导致周期判断错误
+                        LocalDateTime nowForReset = TimeZoneConfig.now();
+                        String updateSql = "UPDATE player_category_reroll SET reroll_count = 0, last_reset_time = ? WHERE player_uuid = ? AND category_id = ?";
                         try (PreparedStatement updatePs = conn.prepareStatement(updateSql)) {
-                            updatePs.setString(1, uuid.toString());
-                            updatePs.setString(2, categoryId);
+                            updatePs.setTimestamp(1, Timestamp.from(TimeZoneConfig.toInstant(nowForReset)), TimeZoneConfig.UTC_CALENDAR);
+                            updatePs.setString(2, uuid.toString());
+                            updatePs.setString(3, categoryId);
                             updatePs.executeUpdate();
                         }
                         return true;
@@ -410,7 +415,7 @@ public class RerollManager {
      */
     public void checkAndResetAllRerollCounts(Connection conn, Player player) throws SQLException {
         for (TaskCategory category : plugin.getConfigManager().getTaskCategories().values()) {
-            if (category.isEnabled() && category.isRerollEnabled()) {
+            if (category.isEnabled()) {
                 checkAndResetRerollCount(conn, player.getUniqueId(), category);
             }
         }
@@ -454,13 +459,23 @@ public class RerollManager {
                 ps.executeUpdate();
             }
         } else {
-            // H2: 使用 MERGE INTO
-            String mergeSql = "MERGE INTO player_category_reroll KEY(player_uuid, category_id) VALUES (?, ?, 0, ?)";
-            try (PreparedStatement ps = conn.prepareStatement(mergeSql)) {
+            // H2: 不能用 MERGE INTO，因为它会覆盖已有记录的 reroll_count 为 0
+            // 改用先查后插的模式（DatabaseQueue 是单线程的，无并发问题）
+            String checkSql = "SELECT COUNT(*) FROM player_category_reroll WHERE player_uuid = ? AND category_id = ?";
+            try (PreparedStatement ps = conn.prepareStatement(checkSql)) {
                 ps.setString(1, uuid.toString());
                 ps.setString(2, categoryId);
-                ps.setTimestamp(3, Timestamp.from(TimeZoneConfig.toInstant(now)), TimeZoneConfig.UTC_CALENDAR);
-                ps.executeUpdate();
+                try (ResultSet rs = ps.executeQuery()) {
+                    if (rs.next() && rs.getInt(1) == 0) {
+                        String insertSql = "INSERT INTO player_category_reroll (player_uuid, category_id, reroll_count, last_reset_time) VALUES (?, ?, 0, ?)";
+                        try (PreparedStatement insertPs = conn.prepareStatement(insertSql)) {
+                            insertPs.setString(1, uuid.toString());
+                            insertPs.setString(2, categoryId);
+                            insertPs.setTimestamp(3, Timestamp.from(TimeZoneConfig.toInstant(now)), TimeZoneConfig.UTC_CALENDAR);
+                            insertPs.executeUpdate();
+                        }
+                    }
+                }
             }
         }
     }
