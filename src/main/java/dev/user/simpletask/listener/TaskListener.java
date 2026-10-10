@@ -4,14 +4,16 @@ import dev.user.simpletask.SimpleTaskPlugin;
 import dev.user.simpletask.task.TaskManager;
 import dev.user.simpletask.task.TaskType;
 import dev.user.simpletask.util.ItemUtil;
-import org.bukkit.GameMode;
 import org.bukkit.Location;
 import org.bukkit.Material;
+import org.bukkit.Tag;
 import java.util.HashMap;
 import java.util.Map;
 import org.bukkit.block.Block;
 import org.bukkit.block.BlockState;
 import org.bukkit.block.data.Ageable;
+import org.bukkit.block.data.type.CaveVinesPlant;
+import org.bukkit.block.data.type.Cake;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.Item;
 import org.bukkit.entity.Player;
@@ -21,19 +23,19 @@ import org.bukkit.event.Listener;
 import org.bukkit.event.block.BlockBreakEvent;
 import org.bukkit.event.block.BlockDropItemEvent;
 import org.bukkit.event.block.BlockPlaceEvent;
+import org.bukkit.event.block.BlockGrowEvent;
 import org.bukkit.event.player.PlayerHarvestBlockEvent;
 import org.bukkit.event.inventory.CraftItemEvent;
 import org.bukkit.event.inventory.SmithItemEvent;
 import org.bukkit.event.player.PlayerFishEvent;
-import org.bukkit.event.player.PlayerInteractEvent;
 import org.bukkit.event.player.PlayerItemConsumeEvent;
 import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.event.player.PlayerCommandPreprocessEvent;
 import org.bukkit.event.player.AsyncPlayerChatEvent;
-import org.bukkit.event.block.Action;
 import org.bukkit.event.entity.EntityDeathEvent;
 import org.bukkit.event.entity.EntityBreedEvent;
+import org.bukkit.event.entity.EntityChangeBlockEvent;
 import org.bukkit.inventory.ItemStack;
 
 import com.google.common.cache.Cache;
@@ -97,7 +99,8 @@ public class TaskListener implements Listener {
             return;
         }
 
-        ItemStack result = event.getRecipe().getResult();
+        // The result slot includes recipe-dependent components (dyes, repairs, etc.).
+        ItemStack result = event.getCurrentItem();
         if (result == null || result.getType() == Material.AIR) {
             return;
         }
@@ -226,56 +229,22 @@ public class TaskListener implements Listener {
     }
 
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
-    public void onPlayerInteract(PlayerInteractEvent event) {
-        // 只处理右键点击方块
-        if (event.getAction() != Action.RIGHT_CLICK_BLOCK) return;
-        if (event.getClickedBlock() == null) return;
-
-        Block block = event.getClickedBlock();
-        Material type = block.getType();
-
-        // 检查是否是蛋糕
-        if (!isCake(type)) return;
-
-        Player player = event.getPlayer();
-
-        // 检查玩家是否可以食用蛋糕
-        if (!canEatCake(player)) return;
-
-        // 获取蛋糕的 item key
-        String itemKey = ItemUtil.getBlockKey(block);
-        if (itemKey == null) {
-            itemKey = "minecraft:" + type.name().toLowerCase();
+    public void onCakeSliceEaten(EntityChangeBlockEvent event) {
+        if (!(event.getEntity() instanceof Player player)) return;
+        var previous = event.getBlock().getBlockData();
+        var next = event.getBlockData();
+        boolean sliceEaten;
+        if (previous instanceof Cake cake) {
+            sliceEaten = next instanceof Cake remaining
+                    ? remaining.getBites() == cake.getBites() + 1
+                    : cake.getBites() == cake.getMaximumBites() && (next.getMaterial().isAir() || next.getMaterial() == Material.WATER);
+        } else {
+            sliceEaten = Tag.CANDLE_CAKES.isTagged(previous.getMaterial()) && next instanceof Cake remaining && remaining.getBites() == 1;
         }
-
-        // 更新 CONSUME 任务进度
-        taskManager.updateProgress(player, TaskType.CONSUME, itemKey, null, 1);
-    }
-
-    /**
-     * 检查是否是蛋糕（支持所有蛋糕类型）
-     */
-    private boolean isCake(Material type) {
-        return type == Material.CAKE ||
-               type.name().endsWith("_CAKE");  // 覆盖蜡烛蛋糕等变种
-    }
-
-    /**
-     * 检查玩家是否可以食用蛋糕
-     */
-    private boolean canEatCake(Player player) {
-        // 创造模式总是可以"吃"（不会减少饥饿值，但会触发动作）
-        if (player.getGameMode() == GameMode.CREATIVE) return true;
-
-        // 检查饥饿值是否已满（20点满）
-        if (player.getFoodLevel() >= 20) return false;
-
-        // 检查是否潜行并手持方块（此时会尝试放置方块而不是吃蛋糕）
-        if (player.isSneaking() && player.getInventory().getItemInMainHand().getType().isBlock()) {
-            return false;
-        }
-
-        return true;
+        if (!sliceEaten) return;
+        // The server emits this change from cake eating, even with statistics disabled.
+        ItemStack cake = new ItemStack(Material.CAKE);
+        taskManager.updateProgress(player, TaskType.CONSUME, ItemUtil.getItemKey(cake), cake, 1);
     }
 
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
@@ -318,7 +287,8 @@ public class TaskListener implements Listener {
      * 检查是否是堆叠生长的作物
      */
     private boolean isStackableCrop(Material type) {
-        return type == Material.BAMBOO || type == Material.SUGAR_CANE || type == Material.CACTUS;
+        return type == Material.BAMBOO || type == Material.SUGAR_CANE || type == Material.CACTUS ||
+                type == Material.KELP || type == Material.KELP_PLANT;
     }
 
     /**
@@ -329,8 +299,9 @@ public class TaskListener implements Listener {
         int totalCount = 0;
         Block current = block;
 
-        // 向上扫描相同类型的方块
-        while (current.getType() == type) {
+        Material itemType = type == Material.KELP_PLANT ? Material.KELP : type;
+        // Kelp columns have a KELP tip above KELP_PLANT body blocks.
+        while (current.getType() == itemType || (itemType == Material.KELP && current.getType() == Material.KELP_PLANT)) {
             Location loc = current.getLocation();
 
             // 检查是否在此 tick 已处理过这个方块（防止快速连击重复计算）
@@ -355,9 +326,8 @@ public class TaskListener implements Listener {
         }
 
         if (totalCount > 0) {
-            // 堆叠作物掉落物与方块类型相同
-            String itemKey = "minecraft:" + type.name().toLowerCase();
-            taskManager.updateProgress(player, TaskType.HARVEST, itemKey, null, totalCount);
+            ItemStack sample = new ItemStack(itemType);
+            taskManager.updateProgress(player, TaskType.HARVEST, ItemUtil.getItemKey(sample), sample, totalCount);
         }
     }
 
@@ -424,9 +394,10 @@ public class TaskListener implements Listener {
         // 2. 检查是否成熟（使用BlockState中的数据）
         if (!isFullyGrown(state)) return;
 
-        // 3. 南瓜、西瓜需要防刷检测（可被精准采集放置）
-        if ((type == Material.PUMPKIN || type == Material.MELON) && wasPlayerPlaced) {
-            plugin.getLogger().fine("[AntiCheat] Harvest at " + loc + " ignored (player placed pumpkin/melon)");
+        // Exclude directly placed fruit/flower blocks that can be harvested repeatedly.
+        if ((type == Material.PUMPKIN || type == Material.MELON || type == Material.TORCHFLOWER ||
+                type == Material.CACTUS_FLOWER) && wasPlayerPlaced) {
+            plugin.getLogger().fine("[AntiCheat] Harvest at " + loc + " ignored (player placed " + type + ")");
             return;
         }
 
@@ -456,11 +427,7 @@ public class TaskListener implements Listener {
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
     public void onPlayerHarvestBlock(PlayerHarvestBlockEvent event) {
         Player player = event.getPlayer();
-        Block block = event.getHarvestedBlock();
-        Material type = block.getType();
-
-        // 只处理浆果类作物
-        if (type != Material.SWEET_BERRY_BUSH && type != Material.CAVE_VINES) return;
+        // This event already represents a successful harvest, including both vine variants.
 
         // 处理掉落物，按物品类型累加后批量更新（避免多次调用导致重复发放奖励）
         Map<String, Integer> itemCounts = new HashMap<>();
@@ -491,16 +458,25 @@ public class TaskListener implements Listener {
         plugin.getAntiCheatManager().recordBlockPlace(loc);
     }
 
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    public void onBlockGrow(BlockGrowEvent event) {
+        if (event.getBlock().getType() == Material.TORCHFLOWER_CROP &&
+                event.getNewState().getType() == Material.TORCHFLOWER) {
+            // A seed-grown flower is harvestable; directly placed flowers remain excluded.
+            plugin.getAntiCheatManager().removeBlockRecord(event.getBlock().getLocation());
+        }
+    }
+
     private boolean isHarvestableCrop(Material type) {
         return switch (type) {
             // 带 Ageable 的作物
-            case WHEAT, CARROTS, POTATOES, BEETROOTS, NETHER_WART, COCOA -> true;
+            case WHEAT, CARROTS, POTATOES, BEETROOTS, NETHER_WART, COCOA, PITCHER_CROP,
+                 SWEET_BERRY_BUSH -> true;
             // 成熟果实方块（无 Ageable，出现时即为成熟）
-            case PUMPKIN, MELON -> true;
+            case PUMPKIN, MELON, TORCHFLOWER, CACTUS_FLOWER -> true;
             // 其他可收获植物（堆叠作物在BlockBreakEvent中处理）
-            case SUGAR_CANE, CACTUS -> true;  // 甘蔗和仙人掌
+            case SUGAR_CANE, CACTUS, KELP, KELP_PLANT, CAVE_VINES, CAVE_VINES_PLANT -> true;
             case BAMBOO, BAMBOO_SAPLING -> true;  // 竹子（包括竹笋阶段）
-            // 注意：甜浆果丛(SWEET_BERRY_BUSH)和发光浆果(CAVE_VINES)由PlayerHarvestBlockEvent处理
             default -> false;
         };
     }
@@ -509,9 +485,9 @@ public class TaskListener implements Listener {
         Material type = state.getType();
 
         // 无 Ageable 的成熟果实方块，出现时即为成熟
-        if (type == Material.PUMPKIN || type == Material.MELON ||
+        if (type == Material.PUMPKIN || type == Material.MELON || type == Material.TORCHFLOWER || type == Material.CACTUS_FLOWER ||
             type == Material.SUGAR_CANE || type == Material.CACTUS ||
-            type == Material.BAMBOO) {
+            type == Material.BAMBOO || type == Material.KELP || type == Material.KELP_PLANT) {
             return true;
         }
 
@@ -520,8 +496,9 @@ public class TaskListener implements Listener {
             return false;
         }
 
-        // 注意：甜浆果丛(SWEET_BERRY_BUSH)和发光浆果(CAVE_VINES)由PlayerHarvestBlockEvent处理
-        // 不需要在这里检查成熟度
+        if (state.getBlockData() instanceof CaveVinesPlant vines) {
+            return vines.hasBerries();
+        }
 
         // 标准 Ageable 作物（小麦、胡萝卜、土豆等）
         if (state.getBlockData() instanceof Ageable ageable) {

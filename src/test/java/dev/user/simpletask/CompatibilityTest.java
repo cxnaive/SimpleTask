@@ -6,6 +6,7 @@ import dev.user.simpletask.util.ExpireUtil;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
+import org.junit.jupiter.params.provider.CsvSource;
 
 import java.time.*;
 import java.util.List;
@@ -43,6 +44,33 @@ class CompatibilityTest {
         assertTrue(template(TaskType.BREAK, List.of("minecraft:stone", "minecraft:dirt")).matchesTarget("minecraft:dirt", null));
         assertFalse(template(TaskType.BREAK, List.of("minecraft:stone")).matchesTarget("minecraft:dirt", null));
         assertTrue(template(TaskType.CHAT, List.of()).matchesTarget("anything", null));
+    }
+
+    @ParameterizedTest
+    @CsvSource({
+        "carrots,carrot", "potatoes,potato", "beetroots,beetroot", "cocoa,cocoa_beans",
+        "torchflower_crop,torchflower", "pitcher_crop,pitcher_plant", "kelp_plant,kelp",
+        "sweet_berry_bush,sweet_berries", "cave_vines,glow_berries", "cave_vines_plant,glow_berries"
+    })
+    void vanillaCropBlockIdsMatchTheirHarvestedItems(String block, String item) {
+        assertTrue(template(TaskType.HARVEST, List.of("minecraft:" + block)).matchesTarget("minecraft:" + item));
+        assertTrue(template(TaskType.BREAK, List.of(item)).matchesTarget("minecraft:" + block));
+    }
+
+    @Test
+    void cropAliasesDoNotRewriteCustomOrUnrelatedVanillaIds() {
+        assertFalse(template(TaskType.HARVEST, List.of("farm:carrots")).matchesTarget("farm:carrot"));
+        assertFalse(template(TaskType.HARVEST, List.of("farm:kelp_plant")).matchesTarget("farm:kelp"));
+        assertFalse(template(TaskType.BREAK, List.of("minecraft:sulfur_bricks")).matchesTarget("minecraft:sulfur_brick"));
+        assertTrue(template(TaskType.BREAK, List.of("sulfur_bricks")).matchesTarget("minecraft:sulfur_bricks"));
+    }
+
+    @ParameterizedTest
+    @EnumSource(value = TaskType.class, names = {"CRAFT", "FISH", "CONSUME", "SUBMIT", "BREAK", "HARVEST"})
+    void oldChainTargetsMatchRenamedIronChainOnlyInVanillaNamespace(TaskType type) {
+        assertTrue(template(type, List.of("minecraft:chain")).matchesTarget("minecraft:iron_chain"));
+        assertTrue(template(type, List.of("minecraft:iron_chain")).matchesTarget("minecraft:chain"));
+        assertFalse(template(type, List.of("custom:chain")).matchesTarget("custom:iron_chain"));
     }
 
     @Test

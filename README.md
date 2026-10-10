@@ -26,6 +26,7 @@
 - (可选) PlaceholderAPI 2.12.3 - 用于占位符条件任务
 
 26.2 验证环境、功能覆盖和复现方法见 [兼容性报告](validation/folia/RESULTS.md)。
+新增内容、食物及全部任务类型的专项检查见 [内容兼容性检查](validation/folia/CONTENT-26.2.md)。
 
 ## 安装方法
 
@@ -41,7 +42,7 @@
 ./gradlew shadowJar
 ```
 
-构建后的 JAR 文件位于 `build/libs/SimpleTask-2.0.1.jar`。
+构建后的 JAR 文件位于 `build/libs/SimpleTask-2.0.2.jar`。
 
 ## 任务分类系统
 
@@ -329,6 +330,14 @@ mine_diamonds:
 - 使用 `/taskadmin reloadfromdb` 可以从数据库重新加载模板到内存（用于多服同步场景）
 
 ## 更新日志
+
+### 2.0.2
+- 补齐仙人掌花、火把花、瓶子草、海带及洞穴藤蔓中段的收获识别
+- 蛋糕依据服务端的实际咬数变化计数，修复放蜡烛、点火、灭火等操作误计
+- 合成任务使用结果槽的实际物品，保留动态配方和自定义物品的组件条件
+- 兼容旧 `minecraft:chain` 配置与新版 `minecraft:iron_chain` ID
+- 作物方块与掉落物使用明确的原版 ID 映射，自定义命名空间保持原 ID
+- 增加原版食物、饮品、组件食物、新物品和新实体的服务端专项验证
 
 ### 2.0.1
 - 升级至 Minecraft 26.2 API、Java 25、Gradle 9.3.1、NBTAPI 2.16.1 和 PlaceholderAPI 2.12.3

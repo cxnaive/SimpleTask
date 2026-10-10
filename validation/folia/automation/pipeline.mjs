@@ -7,6 +7,7 @@ import { artifacts, driver, root, sha256, verifiedDownload, offlineUuid } from '
 import { assertPortFree, managedProcess, until, logIssues } from './harness.mjs';
 import { connectBot } from './bot.mjs';
 import { itemName } from './protocol.mjs';
+import { checkContent } from './content.mjs';
 
 const args = process.argv.slice(2);
 const platform = args.includes('--leaf') ? 'leaf' : 'folia';
@@ -31,7 +32,7 @@ for (const name of [platform, 'mojang', 'nbt', 'papi', 'economy', 'vault', ...(w
   await verifiedDownload(artifact, path);
   await copyFile(path, join(workspace, name === platform ? 'server.jar' : name === 'mojang' ? `cache/${artifact.filename}` : `plugins/${artifact.filename}`));
 }
-await copyFile(join(root, 'build/libs/SimpleTask-2.0.1.jar'), join(workspace, 'plugins/SimpleTask.jar'));
+await copyFile(join(root, 'build/libs/SimpleTask-2.0.2.jar'), join(workspace, 'plugins/SimpleTask.jar'));
 await copyFile(join(root, 'build/libs/SimpleTaskValidation.jar'), join(workspace, 'plugins/SimpleTaskValidation.jar'));
 for (const name of ['config.yml', 'tasks.yml', 'tasks_extra.yml']) {
   await copyFile(join(root, 'validation/folia/fixtures', name), join(workspace, 'plugins/SimpleTask', name));
@@ -286,6 +287,7 @@ try {
     const after = await waitTask('qa_chat', task => task.completed && task.claimed);
     assert.equal(after.balance, persistent.balance); assert.equal(after.database.length, persistent.database.length); return after;
   });
+  await checkContent({ probe, bot, step, status, waitTask, openCategory, findTask, report });
   report.status = 'PASS';
 } catch (error) {
   report.status = 'FAIL'; report.error = error.stack; console.error(error.stack);

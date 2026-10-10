@@ -11,6 +11,19 @@ database:
   h2:
     filename: simpletask
 task-categories:
+  content:
+    enabled: false
+    display:
+      name: content
+      item: minecraft:paper
+      slot: 5
+    assignment:
+      max-concurrent: 1
+      auto-assign: false
+      auto-claim: false
+      expire-policy: permanent
+    reroll:
+      enabled: false
   daily:
     enabled: true
     display:

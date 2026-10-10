@@ -3,7 +3,13 @@ package dev.user.simpletask.validation;
 import com.google.gson.Gson;
 import dev.user.simpletask.SimpleTaskPlugin;
 import dev.user.simpletask.task.PlayerTask;
+import dev.user.simpletask.task.TaskTemplate;
+import dev.user.simpletask.task.TaskType;
+import dev.user.simpletask.task.Reward;
 import dev.user.simpletask.util.ItemUtil;
+import io.papermc.paper.datacomponent.DataComponentTypes;
+import io.papermc.paper.datacomponent.item.Consumable;
+import io.papermc.paper.datacomponent.item.FoodProperties;
 import me.clip.placeholderapi.expansion.PlaceholderExpansion;
 import org.bukkit.*;
 import org.bukkit.block.Block;
@@ -28,6 +34,7 @@ public class ValidationProbe extends JavaPlugin implements CommandExecutor {
     private SimpleTaskPlugin task;
     private PlaceholderExpansion expansion;
     private final Map<String, Integer> commandRewards = new java.util.concurrent.ConcurrentHashMap<>();
+    private final Map<UUID, Location> contentBlocks = new HashMap<>();
 
     @Override public void onEnable() {
         task = (SimpleTaskPlugin) Bukkit.getPluginManager().getPlugin("SimpleTask");
@@ -74,6 +81,31 @@ public class ValidationProbe extends JavaPlugin implements CommandExecutor {
         if (player == null) { report(id, Map.of("error", "player offline")); return true; }
         player.getScheduler().execute(this, () -> {
             try {
+                player.setInvulnerable(true);
+                if (action.equals("content-task")) {
+                    player.closeInventory();
+                    task.getConfigManager().getTaskCategory("content").setEnabled(false);
+                    TaskTemplate template = new TaskTemplate("qa_content", "qa_content", TaskType.valueOf(args[3]),
+                            Arrays.asList(args[4].split(",")), args[3].equals("SUBMIT") ? 1 : 10000,
+                            List.of(), "minecraft:paper", 10, new Reward(0, List.of(), List.of()));
+                    template.setCategory("content");
+                    if (args.length > 5) template.setNbtMatchConditions(List.of(args[5]));
+                    task.getDatabaseQueue().submit("validationContentReset", conn -> {
+                        try (var ps = conn.prepareStatement("DELETE FROM player_daily_tasks WHERE player_uuid=? AND category='content'")) {
+                            ps.setString(1, player.getUniqueId().toString()); return ps.executeUpdate();
+                        }
+                    }, count -> {
+                        task.getTaskManager().updateCategoryTaskCache(player.getUniqueId(), "content", List.of());
+                        task.getTaskManager().importTemplates(List.of(template));
+                        task.getTaskManager().getTemplateSyncManager().reloadFromDatabase(() ->
+                                player.getScheduler().execute(this, () -> {
+                                    task.getConfigManager().getTaskCategory("content").setEnabled(true);
+                                    task.getTaskManager().assignTaskToCategory(player, "content", template,
+                                            success -> report(id, success ? Map.of("assigned", template.getType().name()) : Map.of("error", "assignment failed")));
+                                }, () -> report(id, Map.of("error", "player retired")), 1L));
+                    }, error -> report(id, Map.of("error", error.toString())));
+                    return;
+                }
                 if (action.equals("age")) {
                     var category = task.getConfigManager().getTaskCategory(args[3]);
                     var policy = dev.user.simpletask.task.ExpirePolicy.valueOf(args[4].toUpperCase());
@@ -112,6 +144,24 @@ public class ValidationProbe extends JavaPlugin implements CommandExecutor {
                         yield Map.of("full", true);
                     }
                     case "event" -> event(player, args[3]);
+                    case "registry" -> registry(args[3], args[4]);
+                    case "prepare-block" -> prepareBlock(player, args[3], args.length > 4 ? args[4] : "natural");
+                    case "block-state" -> {
+                        Block block = contentBlocks.get(player.getUniqueId()).getBlock();
+                        yield Map.of("type", block.getType().name(), "data", block.getBlockData().getAsString());
+                    }
+                    case "prepare-food" -> {
+                        player.closeInventory(); player.getInventory().clear();
+                        player.setGameMode(GameMode.SURVIVAL); player.setFoodLevel(Integer.parseInt(args[4]));
+                        ItemStack item = ItemUtil.createItem(task, args[3], 1);
+                        if (args.length > 5 && args[5].equals("component")) {
+                            item.setData(DataComponentTypes.FOOD, FoodProperties.food().nutrition(2).saturation(0.1f).canAlwaysEat(true).build());
+                            item.setData(DataComponentTypes.CONSUMABLE, Consumable.consumable().consumeSeconds(0.1f).build());
+                        }
+                        player.getInventory().setItemInMainHand(item);
+                        yield Map.of("key", ItemUtil.getItemKey(item), "food", player.getFoodLevel());
+                    }
+                    case "content-event" -> contentEvent(player, args[3], args.length > 4 ? args[4] : "minecraft:air");
                     case "ce" -> ce(player, args[3]);
                     default -> throw new IllegalArgumentException("Unknown probe action: " + action);
                 };
@@ -150,6 +200,9 @@ public class ValidationProbe extends JavaPlugin implements CommandExecutor {
         result.put("ownerThread", Bukkit.isOwnedByCurrentRegion(player));
         result.put("balance", task.getEconomyManager().getBalance(player));
         result.put("level", player.getLevel());
+        result.put("food", player.getFoodLevel());
+        result.put("invulnerable", player.isInvulnerable());
+        result.put("cakeSlices", player.getStatistic(Statistic.CAKE_SLICES_EATEN));
         InventoryHolder holder = player.getOpenInventory().getTopInventory().getHolder();
         result.put("gui", holder == null ? "none" : holder.getClass().getSimpleName());
         result.put("commandRewards", commandRewards.getOrDefault(player.getName(), 0));
@@ -238,6 +291,7 @@ public class ValidationProbe extends JavaPlugin implements CommandExecutor {
                 inventory.setMatrix(matrix);
                 var recipe = new ShapelessRecipe(new NamespacedKey(this, "fixture"), new ItemStack(Material.OAK_PLANKS, 4));
                 recipe.addIngredient(Material.OAK_LOG);
+                inventory.setResult(recipe.getResult());
                 var event = new CraftItemEvent(recipe, view, InventoryType.SlotType.RESULT, 0,
                         base.equals("craft") ? ClickType.LEFT : ClickType.SHIFT_LEFT,
                         base.equals("craft") ? InventoryAction.PICKUP_ALL : InventoryAction.MOVE_TO_OTHER_INVENTORY);
@@ -262,5 +316,127 @@ public class ValidationProbe extends JavaPlugin implements CommandExecutor {
             default -> throw new IllegalArgumentException("Unknown fixture event: " + base);
         }
         return Map.of("eventFixture", type, "ownerThread", Bukkit.isOwnedByCurrentRegion(player));
+    }
+
+    private Object registry(String itemIds, String entityIds) {
+        List<String> foods = Arrays.stream(Material.values()).filter(m -> !m.isLegacy() && m.isItem() && m.isEdible())
+                .map(m -> m.getKey().toString()).sorted().toList();
+        Map<String, String> items = new TreeMap<>();
+        for (String id : itemIds.split(",")) {
+            String key = "minecraft:" + id;
+            items.put(key, ItemUtil.getItemKey(ItemUtil.createItem(task, key, 1)));
+        }
+        Map<String, String> entities = new TreeMap<>();
+        for (String id : entityIds.split(",")) {
+            EntityType type = Registry.ENTITY_TYPE.get(NamespacedKey.minecraft(id));
+            entities.put(id, type.getKey().toString());
+        }
+        return Map.of("foods", foods, "items", items, "entities", entities,
+                "newEntity", EntityType.SULFUR_CUBE.getKey().toString(),
+                "oldChain", ItemUtil.getItemKey(ItemUtil.createItem(task, "minecraft:chain", 1)));
+    }
+
+    private Object prepareBlock(Player player, String data, String placement) {
+        player.closeInventory(); player.getInventory().clear(); player.setGameMode(GameMode.SURVIVAL);
+        Location location = player.getLocation().getBlock().getLocation().add(2, 0, 0);
+        Block block = location.getBlock();
+        for (int y = 0; y < 4; y++) {
+            Block part = block.getRelative(0, y, 0);
+            task.getAntiCheatManager().removeBlockRecord(part.getLocation()); part.setType(Material.AIR, false);
+        }
+        block.getRelative(0, -1, 0).setType(Material.FARMLAND, false);
+        if (data.equals("kelp-column")) {
+            block.getRelative(0, -1, 0).setType(Material.DIRT, false);
+            block.setType(Material.KELP_PLANT, false);
+            block.getRelative(0, 1, 0).setType(Material.KELP_PLANT, false);
+            block.getRelative(0, 2, 0).setBlockData(Bukkit.createBlockData("minecraft:kelp[age=0]"), false);
+        } else {
+            block.setBlockData(Bukkit.createBlockData(data), false);
+            if (block.getType() == Material.CAKE || block.getType() == Material.SWEET_BERRY_BUSH) {
+                block.getRelative(0, -1, 0).setType(Material.DIRT, false);
+            }
+            if (block.getType() == Material.CACTUS_FLOWER) {
+                block.getRelative(0, -2, 0).setType(Material.DIRT, false);
+                block.getRelative(0, -1, 0).setType(Material.CACTUS, false);
+            }
+            if (block.getType() == Material.CAVE_VINES || block.getType() == Material.CAVE_VINES_PLANT) {
+                block.getRelative(0, 1, 0).setType(Material.STONE, false);
+            }
+            if (block.getType() == Material.PITCHER_CROP && ((Ageable) block.getBlockData()).getAge() >= 3) {
+                block.getRelative(0, 1, 0).setBlockData(Bukkit.createBlockData(data.replace("half=lower", "half=upper")), false);
+                if (placement.equals("upper")) block = block.getRelative(0, 1, 0);
+            }
+        }
+        if (placement.equals("placed")) task.getAntiCheatManager().recordBlockPlace(block.getLocation());
+        if (placement.equals("grown")) {
+            var grown = block.getState();
+            block.setBlockData(Bukkit.createBlockData("minecraft:torchflower_crop[age=1]"), false);
+            task.getAntiCheatManager().recordBlockPlace(block.getLocation());
+            Bukkit.getPluginManager().callEvent(new BlockGrowEvent(block, grown));
+            grown.update(true, false);
+        }
+        if (block.getType().name().contains("SULFUR") || block.getType().name().contains("CINNABAR")) {
+            player.getInventory().setItemInMainHand(new ItemStack(Material.DIAMOND_PICKAXE));
+        }
+        contentBlocks.put(player.getUniqueId(), block.getLocation());
+        return Map.of("x", block.getX(), "y", block.getY(), "z", block.getZ(), "data", block.getBlockData().getAsString());
+    }
+
+    private Object contentEvent(Player player, String type, String key) {
+        boolean cancelled = type.endsWith("-cancelled");
+        String base = type.replace("-cancelled", "");
+        ItemStack result = ItemUtil.createItem(task, key, 1);
+        switch (base) {
+            case "consume" -> {
+                var event = new PlayerItemConsumeEvent(player, result, EquipmentSlot.OFF_HAND);
+                event.setCancelled(cancelled); Bukkit.getPluginManager().callEvent(event);
+            }
+            case "craft" -> {
+                InventoryView view = player.openWorkbench(null, true);
+                CraftingInventory inventory = (CraftingInventory) view.getTopInventory();
+                var recipe = new ShapelessRecipe(new NamespacedKey(this, "content_fixture"), result.clone());
+                recipe.addIngredient(Material.SULFUR);
+                ItemUtil.applyComponents(result, Map.of("minecraft:custom_data.qa", "7"));
+                inventory.setMatrix(new ItemStack[]{new ItemStack(Material.SULFUR), null, null, null, null, null, null, null, null});
+                inventory.setResult(result);
+                var event = new CraftItemEvent(recipe, view, InventoryType.SlotType.RESULT, 0, ClickType.LEFT, InventoryAction.PICKUP_ALL);
+                event.setCancelled(cancelled); Bukkit.getPluginManager().callEvent(event);
+                inventory.clear(); player.closeInventory();
+            }
+            case "smith" -> {
+                InventoryView view = MenuType.SMITHING.create(player);
+                SmithingInventory inventory = (SmithingInventory) view.getTopInventory();
+                ItemUtil.applyComponents(result, Map.of("minecraft:custom_data.qa", "7"));
+                inventory.setResult(result);
+                player.openInventory(view);
+                var event = new SmithItemEvent(view, InventoryType.SlotType.RESULT, 3, ClickType.LEFT, InventoryAction.PICKUP_ALL);
+                event.setCancelled(cancelled); Bukkit.getPluginManager().callEvent(event);
+                inventory.clear(); player.closeInventory();
+            }
+            case "kill" -> {
+                EntityType entityType = Registry.ENTITY_TYPE.get(NamespacedKey.fromString(key.replace("_spawn_egg", "")));
+                LivingEntity entity = (LivingEntity) player.getWorld().spawnEntity(player.getLocation().add(2, 0, 0), entityType);
+                if (entity instanceof SulfurCube cube) cube.setSize(1);
+                entity.damage(1000, player);
+                if (!entity.isDead()) throw new IllegalStateException("Entity did not die: " + entityType);
+            }
+            case "fish" -> {
+                Item caught = player.getWorld().dropItem(player.getLocation(), result);
+                var event = new PlayerFishEvent(player, caught, null, PlayerFishEvent.State.CAUGHT_FISH);
+                event.setCancelled(cancelled); Bukkit.getPluginManager().callEvent(event); caught.remove();
+            }
+            case "breed" -> {
+                Location location = player.getLocation().add(2, 0, 0);
+                Nautilus mother = player.getWorld().spawn(location, Nautilus.class);
+                Nautilus father = player.getWorld().spawn(location, Nautilus.class);
+                Nautilus child = player.getWorld().spawn(location, Nautilus.class);
+                child.setBaby();
+                var event = new EntityBreedEvent(child, mother, father, player, new ItemStack(Material.PUFFERFISH), 0);
+                event.setCancelled(cancelled); Bukkit.getPluginManager().callEvent(event);
+                mother.remove(); father.remove(); child.remove();
+            }
+            default -> throw new IllegalArgumentException("Unknown content event: " + type);
+        }
+        return Map.of("eventFixture", type, "key", ItemUtil.getItemKey(result));
     }
 }

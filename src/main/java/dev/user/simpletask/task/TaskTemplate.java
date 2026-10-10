@@ -216,6 +216,8 @@ public class TaskTemplate {
             baseMatch = true;
         } else if (targetItem.equalsIgnoreCase(itemKey)) {
             baseMatch = true;
+        } else if (type == TaskType.CRAFT || type == TaskType.FISH || type == TaskType.CONSUME || type == TaskType.SUBMIT) {
+            baseMatch = ItemUtil.normalizeVanillaItemKey(targetItem).equalsIgnoreCase(ItemUtil.normalizeVanillaItemKey(itemKey));
         } else if (type == TaskType.HARVEST || type == TaskType.BREAK) {
             baseMatch = matchesBlockOrItem(targetItem, itemKey);
         } else if (type == TaskType.CHAT) {
@@ -279,8 +281,8 @@ public class TaskTemplate {
     /**
      * 标准化方块/物品ID，用于灵活匹配
      * - 移除 minecraft: 前缀
-     * - 处理常见的单复数差异
-     * - 统一特殊命名（如 cocoa_beans <-> cocoa）
+     * - 仅映射已知的原版作物方块与掉落物 ID
+     * - 自定义命名空间保持原 ID
      */
     private String normalizeBlockOrItemId(String itemKey) {
         if (itemKey == null) return "";
@@ -295,31 +297,24 @@ public class TaskTemplate {
             id = parts[1];
         }
 
-        // 特殊映射表：处理差异大的命名
+        if (!namespace.equals("minecraft")) return namespace + ":" + id;
+
+        // Vanilla crop block/item aliases. Custom namespaces retain their exact IDs.
         id = switch (id) {
-            case "cocoa" -> "cocoa_bean";
-            case "cocoa_beans" -> "cocoa_bean";
+            case "carrots" -> "carrot";
+            case "potatoes" -> "potato";
+            case "beetroots" -> "beetroot";
+            case "cocoa", "cocoa_bean" -> "cocoa_beans";
+            case "chain" -> "iron_chain";
+            case "torchflower_crop" -> "torchflower";
+            case "pitcher_crop" -> "pitcher_plant";
+            case "kelp_plant" -> "kelp";
+            case "sweet_berry_bush" -> "sweet_berries";
+            case "cave_vines", "cave_vines_plant" -> "glow_berries";
             default -> id;
         };
 
-        // 统一单复数形式（移除末尾的 's'，但保留例外）
-        if (id.endsWith("s") && !isIrregularPlural(id)) {
-            id = id.substring(0, id.length() - 1);
-        }
-
         return namespace + ":" + id;
-    }
-
-    /**
-     * 检查是否是不规则复数形式（不应该去 's' 的）
-     */
-    private boolean isIrregularPlural(String id) {
-        return switch (id) {
-            case "cactus", "chorus", "bamboo", "sugar_cane", "chorus_plant",
-                 "chorus_flower", "kelp", "seagrass", "tall_seagrass",
-                 "vines", "cave_vines", "weeping_vines", "twisting_vines" -> true;
-            default -> false;
-        };
     }
 
     /**

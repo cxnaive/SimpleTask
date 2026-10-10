@@ -508,6 +508,7 @@ public class CategoryTaskGUI extends AbstractGUI {
             MessageUtil.send(plugin, player, "<red>该任务没有配置需要提交的物品");
             return;
         }
+        requiredItems = requiredItems.stream().map(ItemUtil::normalizeVanillaItemKey).distinct().toList();
 
         List<String> nbtConditions = task.getTemplate().getNbtMatchConditions();
         Map<String, Integer> inventoryCounts = countItemsInInventory(player, requiredItems, nbtConditions);
@@ -523,9 +524,10 @@ public class CategoryTaskGUI extends AbstractGUI {
         }
 
         final int finalCanSubmit = canSubmit;
+        final List<String> finalRequiredItems = requiredItems;
         final List<String> finalNbtConditions = nbtConditions;
         player.getScheduler().execute(plugin, () -> {
-            int actuallyRemoved = removeItemsFromInventory(player, requiredItems, finalCanSubmit, finalNbtConditions);
+            int actuallyRemoved = removeItemsFromInventory(player, finalRequiredItems, finalCanSubmit, finalNbtConditions);
 
             if (actuallyRemoved <= 0) {
                 MessageUtil.send(plugin, player, "<red>扣除物品失败");

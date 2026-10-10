@@ -61,10 +61,23 @@ export function connectBot(username, port, record, checkServer) {
   const wait = (label, condition, timeout = 15_000) => until(`${username}: ${label}`, () => {
     check(); return condition();
   }, { timeout });
+  let interactionSequence = 0;
   return {
     username, client, state, wait,
     ready: () => wait('login and position', () => state.position, 60_000),
     command(text) { check(); client.chat(text); emit('send', text); },
+    useItem(hand = 0) {
+      check(); client.write('use_item', { hand, sequence: ++interactionSequence,
+        rotation: { x: state.position.yaw, y: state.position.pitch } });
+    },
+    useBlock(location, cursorY = 0.25, hand = 0) {
+      check(); client.write('block_place', { hand, location, direction: 1,
+        cursorX: 0.5, cursorY, cursorZ: 0.5, insideBlock: false, worldBorderHit: false,
+        sequence: ++interactionSequence });
+    },
+    digBlock(location, status = 0) {
+      check(); client.write('block_dig', { status, location, face: 1, sequence: ++interactionSequence });
+    },
     click(slot, mouseButton = 0) {
       check();
       if (!state.current?.items) throw new Error('No menu received');

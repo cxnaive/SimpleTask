@@ -19,6 +19,7 @@ import org.bukkit.inventory.meta.ItemMeta;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Locale;
 import java.util.stream.Collectors;
 
 public class ItemUtil {
@@ -55,6 +56,10 @@ public class ItemUtil {
         return ceAvailable;
     }
 
+    public static String normalizeVanillaItemKey(String key) {
+        return key != null && key.equalsIgnoreCase("minecraft:chain") ? "minecraft:iron_chain" : key;
+    }
+
     /**
      * 从物品键创建物品（支持原版物品和CE物品）
      */
@@ -62,6 +67,8 @@ public class ItemUtil {
         if (key == null || key.isEmpty()) {
             return new ItemStack(Material.STONE);
         }
+        key = normalizeVanillaItemKey(key);
+        if (key.equalsIgnoreCase("chain")) key = "iron_chain";
 
         // 解析命名空间和ID
         String namespace = "minecraft";
@@ -84,7 +91,7 @@ public class ItemUtil {
 
         // 尝试创建原版物品
         try {
-            Material material = Material.valueOf(id.toUpperCase());
+            Material material = Material.valueOf(id.toUpperCase(Locale.ROOT));
             return new ItemStack(material, amount);
         } catch (IllegalArgumentException e) {
             plugin.getLogger().warning("未知的物品: " + key);
@@ -303,7 +310,7 @@ public class ItemUtil {
         }
 
         String itemKey = getItemKey(item);
-        return itemKey.equalsIgnoreCase(targetKey);
+        return normalizeVanillaItemKey(itemKey).equalsIgnoreCase(normalizeVanillaItemKey(targetKey));
     }
 
     /**

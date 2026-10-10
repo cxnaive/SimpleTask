@@ -1,5 +1,8 @@
 # Minecraft 26.2 验证结果
 
+本文保留 SimpleTask 2.0.1 的历史结果和产物哈希。最新 2.0.2 的全部任务类型、
+食物及新增内容检查见 [内容兼容性报告](CONTENT-26.2.md)。
+
 2026-10-10 完成 SimpleTask 2.0.1 的 26.2 API 升级与验证。
 编译依赖为 `dev.folia:folia-api:26.2.build.7-beta`，构建和运行要求 Java 25。
 NBTAPI 升级至 2.16.1、PlaceholderAPI 编译依赖升级至 2.12.3；Gradle 为 9.3.1。
