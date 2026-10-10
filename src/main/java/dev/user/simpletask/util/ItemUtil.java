@@ -6,8 +6,8 @@ import net.kyori.adventure.text.format.TextDecoration;
 import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer;
 import net.momirealms.craftengine.bukkit.api.CraftEngineItems;
 import net.momirealms.craftengine.bukkit.api.CraftEngineBlocks;
+import net.momirealms.craftengine.bukkit.item.BukkitItemDefinition;
 import net.momirealms.craftengine.core.block.ImmutableBlockState;
-import net.momirealms.craftengine.core.item.CustomItem;
 import net.momirealms.craftengine.core.item.ItemBuildContext;
 import net.momirealms.craftengine.core.util.Key;
 import de.tr7zw.nbtapi.iface.ReadWriteNBT;
@@ -98,9 +98,9 @@ public class ItemUtil {
     private static ItemStack getCEItem(SimpleTaskPlugin plugin, String namespace, String id) {
         try {
             Key itemKey = Key.of(namespace, id);
-            CustomItem<ItemStack> customItem = CraftEngineItems.byId(itemKey);
-            if (customItem != null) {
-                return customItem.buildItemStack(ItemBuildContext.empty(), 1);
+            BukkitItemDefinition itemDefinition = CraftEngineItems.byId(itemKey);
+            if (itemDefinition != null) {
+                return itemDefinition.buildItem(ItemBuildContext.empty(), 1).getBukkitItem();
             }
         } catch (Exception e) {
             plugin.getLogger().warning("[CE] 获取CE物品失败 " + namespace + ":" + id + ": " + e.getMessage());
@@ -510,7 +510,7 @@ public class ItemUtil {
         try {
             ImmutableBlockState state = CraftEngineBlocks.getCustomBlockState(block);
             if (state != null && !state.isEmpty()) {
-                return state.owner().value().id().toString();
+                return state.owner().value().id().asString();
             }
         } catch (Exception e) {
             // CE API 调用失败

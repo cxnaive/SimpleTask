@@ -5,7 +5,7 @@ plugins {
 }
 
 group = "dev.user"
-version = "1.1.0"
+version = "2.0.0"
 
 dependencies {
     // Folia API
@@ -15,8 +15,8 @@ dependencies {
     compileOnly("com.github.YiC200333:XConomyAPI:2.25.1")
 
     // CraftEngine (软依赖)
-    compileOnly("net.momirealms:craft-engine-bukkit:0.0.67")
-    compileOnly("net.momirealms:craft-engine-core:0.0.67")
+    compileOnly("net.momirealms:craft-engine-core:26.7")
+    compileOnly("net.momirealms:craft-engine-bukkit:26.7")
 
     // NBT API
     compileOnly("de.tr7zw:item-nbt-api-plugin:2.15.5")
@@ -52,6 +52,7 @@ tasks {
     }
 
     processResources {
+        inputs.property("version", project.version)
         filesMatching("plugin.yml") {
             expand("version" to version)
         }
