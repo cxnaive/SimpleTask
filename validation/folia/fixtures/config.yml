@@ -1,0 +1,198 @@
+timezone: Asia/Shanghai
+database:
+  type: h2
+  mysql:
+    host: localhost
+    port: 3306
+    database: simpletask
+    username: root
+    password: password
+    pool-size: 10
+  h2:
+    filename: simpletask
+task-categories:
+  daily:
+    enabled: true
+    display:
+      name: daily
+      item: minecraft:paper
+      slot: 0
+    assignment:
+      max-concurrent: 9
+      auto-assign: true
+      auto-claim: false
+      expire-policy: permanent
+    reroll:
+      enabled: true
+      cost: 0
+      max-count: 2
+      keep-completed: false
+  automatic:
+    enabled: true
+    display:
+      name: automatic
+      item: minecraft:paper
+      slot: 1
+    assignment:
+      max-concurrent: 3
+      auto-assign: true
+      auto-claim: true
+      expire-policy: permanent
+    reroll:
+      enabled: true
+      cost: 0
+      max-count: 2
+      keep-completed: false
+  nbt:
+    enabled: true
+    display:
+      name: nbt
+      item: minecraft:paper
+      slot: 2
+    assignment:
+      max-concurrent: 1
+      auto-assign: true
+      auto-claim: false
+      expire-policy: permanent
+    reroll:
+      enabled: true
+      cost: 0
+      max-count: 2
+      keep-completed: false
+  reroll:
+    enabled: true
+    display:
+      name: reroll
+      item: minecraft:paper
+      slot: 3
+    assignment:
+      max-concurrent: 1
+      auto-assign: true
+      auto-claim: false
+      expire-policy: permanent
+    reroll:
+      enabled: true
+      cost: 10
+      max-count: 2
+      keep-completed: false
+  expiry:
+    enabled: true
+    display:
+      name: expiry
+      item: minecraft:paper
+      slot: 4
+    assignment:
+      max-concurrent: 1
+      auto-assign: true
+      auto-claim: false
+      expire-policy: permanent
+    reroll:
+      enabled: true
+      cost: 0
+      max-count: 2
+      keep-completed: false
+anti-cheat:
+  enabled: true
+  time-window: 3600
+template:
+  sync-interval: 0
+task-check:
+  interval-minutes: 1
+papi-check:
+  interval-seconds: 1
+gui:
+  titles:
+    daily-tasks: <dark_gray>任务
+    task-categories: <gold><bold>任务系统
+    admin: <dark_gray>任务管理
+  decoration:
+    border:
+      material: minecraft:black_stained_glass_pane
+      name: ' '
+    completed:
+      material: minecraft:lime_stained_glass_pane
+      name: <green>已完成
+    in-progress:
+      material: minecraft:yellow_stained_glass_pane
+      name: <yellow>进行中
+    not-started:
+      material: minecraft:red_stained_glass_pane
+      name: <red>未开始
+  task-item:
+    progress: '<gray>进度: <yellow>{current}/{target}'
+    reward-money: '<gold>金币奖励: <yellow>{money}'
+    reward-items: '<gold>物品奖励: <yellow>{count} 种'
+    status-completed: <green>✓ 已领取奖励
+    status-claimable: <yellow>点击领取奖励!
+    status-in-progress: <yellow>进行中
+    status-not-started: <gray>未开始
+    click-to-claim: <yellow>点击领取奖励
+commands:
+  help-title: <gold>===== 任务系统帮助 =====
+  help-player:
+  - <yellow>/task <gray>- 打开任务界面
+  help-admin:
+  - <yellow>/taskadmin <gray>- 打开管理界面
+  - <yellow>/taskadmin reloadconfig <gray>- 重载配置
+  - <yellow>/taskadmin import [all|任务key] <gray>- 导入任务模板
+  - <yellow>/taskadmin list <gray>- 查看任务列表
+  - <yellow>/taskadmin delete <任务key> <gray>- 禁用任务模板
+  - <yellow>/taskadmin reroll <玩家名/all> <类别> <gray>- 重新抽取指定类别任务
+  - <yellow>/taskadmin rerollall <玩家名/all> <类别> <gray>- 强制刷新指定类别任务
+  - <yellow>/taskadmin resetreroll <玩家名/all> <类别> <gray>- 重置指定类别刷新次数
+  - <yellow>/taskadmin cleardata <任务key> [all|玩家名] <gray>- 清除任务模板及玩家数据
+  - <yellow>/taskadmin cleardata-category <分类> [all|玩家名] <gray>- 清除分类所有数据
+  - <yellow>/taskadmin help <gray>- 显示此帮助
+  unknown-command: <red>未知命令，使用 <yellow>/taskadmin help <red>查看帮助
+  player-only: <red>此命令只能由玩家执行
+admin:
+  config-reloaded: <green>配置已重载!
+  import-success-all: <green>成功导入 <yellow>{count} <green>个任务模板
+  import-success-single: '<green>成功导入任务: <yellow>{task_key}'
+  import-fail: '<red>导入失败: 未找到任务模板'
+  import-fail-not-found: '<red>未找到任务模板: <yellow>{task_key}'
+  list-title-config: <gold>===== 配置文件任务 (tasks.yml) =====
+  list-title-database: <gold>===== 数据库任务 =====
+  list-status-imported: <green>[已导入]
+  list-status-not-imported: <gray>[未导入]
+  list-template-info: '<yellow>{key} <gray>| <white>{type} <gray>| 权重: <white>{weight}'
+  delete-success: <green>任务 <yellow>{task_key} <green>已删除
+  delete-fail-not-found: '<red>未找到任务模板: <yellow>{task_key}'
+  no-permission: <red>你没有权限执行此操作
+  reroll-success-player: <green>已为玩家 <yellow>{player} <green>重新抽取 <yellow>{category}
+    <green>类别任务
+  reroll-success-all: <green>已为 <yellow>{count} <green>名玩家重新抽取 <yellow>{category}
+    <green>类别任务
+  reroll-fail-player-not-found: '<red>找不到玩家: <yellow>{player}'
+task-types:
+  CHAT: 发言
+  CRAFT: 合成
+  FISH: 钓鱼
+  CONSUME: 消耗
+  BREAK: 挖掘
+  HARVEST: 收获
+  SUBMIT: 提交
+  KILL: 击杀
+  BREED: 繁殖
+  COMMAND: 命令
+  PAPI: 条件
+status:
+  completed: 已完成
+  in-progress: 进行中
+  not-started: 未开始
+  claimable: 可领取
+economy:
+  currency-name: 金币
+  currency-format: '{amount} {currency}'
+messages:
+  prefix: <gold>[任务系统] <reset>
+  no-permission: <red>你没有权限执行此操作。
+  task-completed: '<green>恭喜！你完成了任务: <yellow>{task_name}'
+  task-completed-auto: '<green>恭喜！你完成了任务: <yellow>{task_name} <green>，奖励已自动发放: <yellow>{reward}'
+  task-progress-milestone: '<gray>任务 <yellow>{task_name} <gray>进度: <yellow>{progress}/{target}
+    <gray>({percent}%)'
+  all-tasks-completed: <green>恭喜！你已完成「{category}」的所有任务！
+  reward-claimed: '<green>已领取奖励: <yellow>{reward}'
+  task-assigned: '<yellow>管理员给你添加了新任务: <gold>{task_name}'
+  tasks-refreshed: <green>你的 <yellow>{categories} <green>任务已刷新！
+  reroll-fail-no-templates: <red>没有更多可用的任务模板可以刷新

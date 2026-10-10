@@ -342,14 +342,17 @@ public class TaskProgressManager {
                 return affected > 0;
             }
         }, success -> {
-            if (success) {
-                // 更新内存缓存
-                task.setCurrentProgress(newProgress);
-                if (nowCompleted) {
-                    task.setCompleted(true);
+            player.getScheduler().execute(plugin, () -> {
+                if (success) {
+                    // 提交任务使用同一完成流程，遵守分类的自动领取设置。
+                    boolean wasCompleted = task.isCompleted();
+                    task.setCurrentProgress(newProgress);
+                    if (nowCompleted && !wasCompleted) {
+                        onTaskComplete(player, task);
+                    }
                 }
-            }
-            callback.accept(success, nowCompleted);
+                callback.accept(success, nowCompleted);
+            }, null, 1L);
         }, e -> {
             plugin.getLogger().log(java.util.logging.Level.SEVERE, "Failed to update submit task progress", e);
             callback.accept(false, false);

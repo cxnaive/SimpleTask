@@ -1,0 +1,254 @@
+qa_chat:
+  name: qa_chat
+  type: CHAT
+  category: daily
+  target-item: QA_TASK_CHAT
+  target-amount: 1
+  description:
+  - compatibility fixture
+  - '26.2'
+  icon: minecraft:paper
+  weight: 10
+  reward:
+    money: 5
+    items:
+    - item: minecraft:emerald
+      amount: 1
+    commands:
+    - stprobe_reward {player}
+qa_craft:
+  name: qa_craft
+  type: CRAFT
+  category: daily
+  target-item: minecraft:oak_planks
+  target-amount: 12
+  description:
+  - compatibility fixture
+  - '26.2'
+  icon: minecraft:paper
+  weight: 10
+  reward:
+    money: 5
+    items:
+    - item: minecraft:emerald
+      amount: 1
+    commands:
+    - stprobe_reward {player}
+qa_fish:
+  name: qa_fish
+  type: FISH
+  category: daily
+  target-item: minecraft:cod
+  target-amount: 2
+  description:
+  - compatibility fixture
+  - '26.2'
+  icon: minecraft:paper
+  weight: 10
+  reward:
+    money: 5
+    items:
+    - item: minecraft:emerald
+      amount: 1
+    commands:
+    - stprobe_reward {player}
+qa_consume:
+  name: qa_consume
+  type: CONSUME
+  category: daily
+  target-item: minecraft:apple
+  target-amount: 1
+  description:
+  - compatibility fixture
+  - '26.2'
+  icon: minecraft:paper
+  weight: 10
+  reward:
+    money: 5
+    items:
+    - item: minecraft:emerald
+      amount: 1
+    commands:
+    - stprobe_reward {player}
+qa_break:
+  name: qa_break
+  type: BREAK
+  category: daily
+  target-item: minecraft:stone
+  target-amount: 1
+  description:
+  - compatibility fixture
+  - '26.2'
+  icon: minecraft:paper
+  weight: 10
+  reward:
+    money: 5
+    items:
+    - item: minecraft:emerald
+      amount: 1
+    commands:
+    - stprobe_reward {player}
+qa_submit:
+  name: qa_submit
+  type: SUBMIT
+  category: daily
+  target-item: minecraft:diamond
+  target-amount: 2
+  description: &id003
+  - compatibility fixture
+  - '26.2'
+  icon: minecraft:paper
+  weight: 10
+  reward: &id004
+    money: 5
+    items:
+    - item: minecraft:emerald
+      amount: 1
+    commands:
+    - stprobe_reward {player}
+qa_kill:
+  name: qa_kill
+  type: KILL
+  category: daily
+  target-item: minecraft:zombie
+  target-amount: 1
+  description:
+  - compatibility fixture
+  - '26.2'
+  icon: minecraft:paper
+  weight: 10
+  reward:
+    money: 5
+    items:
+    - item: minecraft:emerald
+      amount: 1
+    commands:
+    - stprobe_reward {player}
+qa_breed:
+  name: qa_breed
+  type: BREED
+  category: daily
+  target-item: minecraft:cow
+  target-amount: 1
+  description:
+  - compatibility fixture
+  - '26.2'
+  icon: minecraft:paper
+  weight: 10
+  reward:
+    money: 5
+    items:
+    - item: minecraft:emerald
+      amount: 1
+    commands:
+    - stprobe_reward {player}
+qa_command:
+  name: qa_command
+  type: COMMAND
+  category: daily
+  target-item: stprobe_noop
+  target-amount: 1
+  description:
+  - compatibility fixture
+  - '26.2'
+  icon: minecraft:paper
+  weight: 10
+  reward:
+    money: 5
+    items:
+    - item: minecraft:emerald
+      amount: 1
+    commands:
+    - stprobe_reward {player}
+qa_harvest:
+  name: qa_harvest
+  type: HARVEST
+  category: automatic
+  target-item: minecraft:potato
+  target-amount: 5
+  description:
+  - compatibility fixture
+  - '26.2'
+  icon: minecraft:paper
+  weight: 10
+  reward:
+    money: 5
+    items:
+    - item: minecraft:emerald
+      amount: 1
+    commands:
+    - stprobe_reward {player}
+qa_papi:
+  name: qa_papi
+  type: PAPI
+  category: automatic
+  target-item: '%stqa_level% >= 7'
+  target-amount: 1
+  description:
+  - compatibility fixture
+  - '26.2'
+  icon: minecraft:paper
+  weight: 10
+  reward:
+    money: 5
+    items:
+    - item: minecraft:emerald
+      amount: 1
+    commands:
+    - stprobe_reward {player}
+qa_reroll:
+  name: qa_reroll
+  type: CHAT
+  category: reroll
+  target-item: never-reroll
+  target-amount: 1
+  description: &id001
+  - compatibility fixture
+  - '26.2'
+  icon: minecraft:paper
+  weight: 10
+  reward: &id002
+    money: 5
+    items:
+    - item: minecraft:emerald
+      amount: 1
+    commands:
+    - stprobe_reward {player}
+qa_expiry:
+  name: qa_expiry
+  type: CHAT
+  category: expiry
+  target-item: never-expiry
+  target-amount: 1
+  description:
+  - compatibility fixture
+  - '26.2'
+  icon: minecraft:paper
+  weight: 10
+  reward:
+    money: 5
+    items:
+    - item: minecraft:emerald
+      amount: 1
+    commands:
+    - stprobe_reward {player}
+qa_reroll_alternate:
+  name: qa_reroll_alternate
+  type: CHAT
+  category: reroll
+  target-item: never-reroll
+  target-amount: 1
+  description: *id001
+  icon: minecraft:paper
+  weight: 10
+  reward: *id002
+qa_auto_submit:
+  name: qa_auto_submit
+  type: SUBMIT
+  category: automatic
+  target-item: minecraft:gold_ingot
+  target-amount: 1
+  description: *id003
+  icon: minecraft:paper
+  weight: 10
+  reward: *id004

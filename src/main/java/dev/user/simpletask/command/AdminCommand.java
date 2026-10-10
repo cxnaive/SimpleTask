@@ -34,10 +34,10 @@ public class AdminCommand implements CommandExecutor, TabCompleter {
 
         if (args.length == 0) {
             if (sender instanceof Player player) {
-                plugin.getServer().getGlobalRegionScheduler().execute(plugin, () -> {
+                player.getScheduler().execute(plugin, () -> {
                     AdminTaskGUI gui = new AdminTaskGUI(plugin, player);
                     gui.open();
-                });
+                }, null, 1L);
             } else {
                 sendHelp(sender);
             }

@@ -4,11 +4,13 @@
 兼容 Folia/Paper 的玩家任务系统插件，支持多分类任务、多种过期策略、进度追踪、奖励发放。
 
 ## 技术栈
-- **构建工具**: Gradle (Kotlin DSL) + Shadow 插件
-- **服务端API**: Folia API 1.21
+- **构建工具**: Gradle 9.3.1 (Kotlin DSL) + Shadow 插件，Java 25
+- **服务端API**: Folia API 26.2.build.7-beta
 - **数据库**: HikariCP + H2 (本地) / MySQL (跨服)
 - **经济系统**: XConomy API (软依赖)
-- **自定义物品**: CraftEngine API (软依赖)
+- **自定义物品**: CraftEngine 26.7 API (软依赖；26.2 实服验证使用 26.9.2)
+- **NBT 组件**: NBTAPI 2.16.1 (硬依赖)
+- **占位符**: PlaceholderAPI 2.12.3 (软依赖)
 - **序列化**: Gson
 
 ## 项目结构
@@ -100,7 +102,7 @@ TaskManager 作为入口类，委托给专门的管理器：
 - **TaskScheduler**: 定时任务调度
 
 ### 4. 任务类型
-CHAT (发言), CRAFT (合成), FISH (钓鱼), CONSUME (消耗), BREAK (挖掘), HARVEST (收获), SUBMIT (提交), KILL (击杀), BREED (繁殖)
+CHAT (发言), CRAFT (合成), FISH (钓鱼), CONSUME (消耗), BREAK (挖掘), HARVEST (收获), SUBMIT (提交), KILL (击杀), BREED (繁殖), COMMAND (命令), PAPI (占位符条件)
 
 #### CRAFT 类型 Shift+点击合成计算
 ```java
@@ -302,7 +304,9 @@ player_category_reset:
 ```bash
 ./gradlew shadowJar
 ```
-产物：`build/libs/SimpleTask-1.0.4.jar`
+产物：`build/libs/SimpleTask-2.0.1.jar`
+
+26.2 实服验证及复现步骤见 `validation/folia/RESULTS.md`；探针独立打包，不进入生产 JAR。
 
 ## 部署
 1. 放入 `plugins/` 目录

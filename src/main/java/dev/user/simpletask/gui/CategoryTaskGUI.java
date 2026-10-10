@@ -538,13 +538,17 @@ public class CategoryTaskGUI extends AbstractGUI {
             // 使用 TaskProgressManager 提交任务进度
             plugin.getTaskManager().getProgressManager().submitTaskProgress(player, task, newProgress, (success, completed) -> {
                 if (success) {
-                    if (completed) {
+                    if (completed && !category.isAutoClaim()) {
                         MessageUtil.send(plugin, player, "<green>任务完成！点击领取奖励");
-                    } else {
+                    } else if (!completed) {
                         MessageUtil.send(plugin, player, "<yellow>已提交物品，进度: {current}/{target}",
                             MessageUtil.textPlaceholders("current", String.valueOf(newProgress), "target", String.valueOf(targetAmount)));
                     }
-                    initialize();
+                    player.getScheduler().execute(plugin, () -> {
+                        if (GUIManager.getOpenGUI(player.getUniqueId()) == this) {
+                            initialize();
+                        }
+                    }, null, 1L);
                 } else {
                     MessageUtil.send(plugin, player, "<red>提交失败，进度未保存");
                 }

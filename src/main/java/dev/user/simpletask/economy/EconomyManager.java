@@ -19,7 +19,7 @@ public class EconomyManager {
     }
 
     private void setupEconomy() {
-        if (plugin.getServer().getPluginManager().getPlugin("XConomy") == null) {
+        if (!plugin.getServer().getPluginManager().isPluginEnabled("XConomy")) {
             plugin.getLogger().warning("XConomy not found, economy features disabled");
             return;
         }

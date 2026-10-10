@@ -1,0 +1,17 @@
+name: SimpleTaskValidation
+version: '1.0'
+main: dev.user.simpletask.validation.ValidationProbe
+api-version: '26.2'
+folia-supported: true
+depend: [SimpleTask]
+softdepend: [PlaceholderAPI, CraftEngine, XConomy]
+commands:
+  stprobe:
+    permission: simpletask.validation
+  stprobe_reward:
+    permission: simpletask.validation
+  stprobe_noop:
+    description: Compatibility command fixture
+permissions:
+  simpletask.validation:
+    default: op

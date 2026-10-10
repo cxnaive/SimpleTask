@@ -96,6 +96,9 @@ public class ItemUtil {
      * 获取CE物品
      */
     private static ItemStack getCEItem(SimpleTaskPlugin plugin, String namespace, String id) {
+        if (!ceAvailable) {
+            return null;
+        }
         try {
             Key itemKey = Key.of(namespace, id);
             BukkitItemDefinition itemDefinition = CraftEngineItems.byId(itemKey);

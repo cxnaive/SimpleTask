@@ -1,0 +1,20 @@
+qa_nbt:
+  name: qa_nbt
+  type: SUBMIT
+  category: nbt
+  target-item: minecraft:diamond
+  target-amount: 1
+  description:
+  - compatibility fixture
+  - '26.2'
+  icon: minecraft:paper
+  weight: 10
+  reward:
+    money: 5
+    items:
+    - item: minecraft:emerald
+      amount: 1
+    commands:
+    - stprobe_reward {player}
+  nbt-match:
+  - minecraft:custom_data.qa+7

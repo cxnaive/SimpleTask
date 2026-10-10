@@ -1,7 +1,7 @@
 name: SimpleTask
 version: '${version}'
 main: dev.user.simpletask.SimpleTaskPlugin
-api-version: '1.21'
+api-version: '26.2'
 folia-supported: true
 author: user
 description: A simple daily task system for Folia/Paper servers

@@ -34,14 +34,17 @@ public class RerollManager {
     private final TaskGenerator taskGenerator;
     private final TemplateSyncManager templateSyncManager;
     private final DatabaseUtils databaseUtils;
+    private final TaskExpireManager expireManager;
 
     public RerollManager(SimpleTaskPlugin plugin, TaskCacheManager cacheManager,
-                         TaskGenerator taskGenerator, TemplateSyncManager templateSyncManager) {
+                         TaskGenerator taskGenerator, TemplateSyncManager templateSyncManager,
+                         TaskExpireManager expireManager) {
         this.plugin = plugin;
         this.cacheManager = cacheManager;
         this.taskGenerator = taskGenerator;
         this.templateSyncManager = templateSyncManager;
         this.databaseUtils = new DatabaseUtils(plugin);
+        this.expireManager = expireManager;
     }
 
     // ==================== 公共验证方法 ====================
@@ -145,6 +148,7 @@ public class RerollManager {
 
                     boolean canReroll = incrementRerollCountAtomic(conn, uuid, category, now);
                     if (!canReroll) {
+                        conn.rollback();
                         return RerollResult.fail(MessageUtil.parse(
                             "<red>当前周期刷新次数已用完（上限：{max}次）",
                             MessageUtil.textPlaceholders("max", String.valueOf(category.getRerollMaxCount()))));
@@ -161,8 +165,13 @@ public class RerollManager {
                     result = doFullReroll(conn, player, uuid, now, category);
                 }
 
+                if (!result.isSuccess()) {
+                    conn.rollback();
+                    return result;
+                }
+                List<PlayerTask> refreshedTasks = expireManager.loadTasksByCategory(conn, uuid, categoryId);
                 conn.commit();
-                return result;
+                return new RerollResult(true, result.getMessage(), refreshedTasks);
             } catch (SQLException e) {
                 try {
                     conn.rollback();
@@ -189,7 +198,7 @@ public class RerollManager {
                 if (cost > 0 && plugin.getEconomyManager().isEnabled()) {
                     plugin.getEconomyManager().withdraw(player, cost);
                 }
-                cacheManager.getOrCreatePlayerTaskCache(uuid).remove(categoryId);
+                cacheManager.updateCategoryTaskCache(uuid, categoryId, result.tasks);
                 callback.accept(true, result.getMessage());
             } else {
                 callback.accept(false, result.getMessage());
@@ -598,10 +607,16 @@ public class RerollManager {
     private static class RerollResult {
         private final boolean success;
         private final Component message;
+        private final List<PlayerTask> tasks;
 
         private RerollResult(boolean success, Component message) {
+            this(success, message, List.of());
+        }
+
+        private RerollResult(boolean success, Component message, List<PlayerTask> tasks) {
             this.success = success;
             this.message = message;
+            this.tasks = tasks;
         }
 
         static RerollResult success(Component message) {

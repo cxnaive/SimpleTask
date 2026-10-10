@@ -39,3 +39,8 @@ logs/
 
 # Claude
 .claude/
+
+# Isolated compatibility validation
+validation/folia/automation/node_modules/
+validation/folia/automation/cache/
+validation/reports/

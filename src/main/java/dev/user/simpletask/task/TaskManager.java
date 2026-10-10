@@ -41,7 +41,7 @@ public class TaskManager {
         this.cacheManager = new TaskCacheManager(plugin);
         this.taskGenerator = new TaskGenerator(plugin, templateSyncManager);
         this.expireManager = new TaskExpireManager(plugin, cacheManager, taskGenerator, templateSyncManager);
-        this.rerollManager = new RerollManager(plugin, cacheManager, taskGenerator, templateSyncManager);
+        this.rerollManager = new RerollManager(plugin, cacheManager, taskGenerator, templateSyncManager, expireManager);
         this.taskScheduler = new TaskScheduler(plugin);
         this.progressManager = new TaskProgressManager(plugin, cacheManager);
         this.papiChecker = new PAPIChecker(plugin, cacheManager);
@@ -340,19 +340,25 @@ public class TaskManager {
             boolean hasTask = existingTasks.stream()
                 .anyMatch(t -> t.getTaskKey().equals(template.getTaskKey()));
             if (hasTask) {
-                return false;
+                return Collections.<PlayerTask>emptyList();
             }
 
             // 生成单个任务
-            List<PlayerTask> newTasks = taskGenerator.generateTasksForCategory(
+            return taskGenerator.generateTasksForCategory(
                 conn, player, category, 1, existingTasks,
                 Collections.singletonList(template)
             );
-            return !newTasks.isEmpty();
-        }, success -> {
+        }, newTasks -> {
+            boolean success = !newTasks.isEmpty();
             if (success) {
-                // 更新缓存
-                cacheManager.clearPlayerCache(player.getUniqueId());
+                // 合并新任务，保留玩家其它分类的任务缓存。
+                List<PlayerTask> updatedTasks = new ArrayList<>(cacheManager.getPlayerTasksByCategory(player.getUniqueId(), categoryId));
+                for (PlayerTask newTask : newTasks) {
+                    if (updatedTasks.stream().noneMatch(existing -> existing.getTaskKey().equals(newTask.getTaskKey()))) {
+                        updatedTasks.add(newTask);
+                    }
+                }
+                cacheManager.updateCategoryTaskCache(player.getUniqueId(), categoryId, updatedTasks);
                 // 通知玩家
                 if (player.isOnline()) {
                     MessageUtil.sendConfigWithComponents(plugin, player, "task-assigned",

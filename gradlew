@@ -1,7 +1,7 @@
 #!/bin/sh
 
 #
-# Copyright © 2015-2021 the original authors.
+# Copyright © 2015 the original authors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -14,6 +14,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+#
+# SPDX-License-Identifier: Apache-2.0
 #
 
 ##############################################################################
@@ -42,13 +44,23 @@
 #   (2) This script targets any POSIX shell, so it avoids extensions provided
 #       by Bash, Ksh, etc; in particular arrays are avoided.
 #
-#       The "traditional" style of managing the build is retained, where the
-#       "traditional" style handles "$?" implicitly, so that it's an explicit
-#       "test -n" with exit codes:
-#           ./gradlew '---args---'
+#       The "traditional" practice of packing multiple parameters into a
+#       space-separated string is a well documented source of bugs and security
+#       problems, so this is (mostly) avoided, by progressively accumulating
+#       options in "$@", and eventually passing that to Java.
 #
-#       "is_exec" determines this by checking if "$arg" looks like an
-#       argument.
+#       Where the inherited environment variables (DEFAULT_JVM_OPTS, JAVA_OPTS,
+#       and GRADLE_OPTS) rely on word-splitting, this is performed explicitly;
+#       see the in-line comments for details.
+#
+#       There are tweaks for specific operating systems such as AIX, CygWin,
+#       Darwin, MinGW, and NonStop.
+#
+#   (3) This script is generated from the Groovy template
+#       https://github.com/gradle/gradle/blob/HEAD/platforms/jvm/plugins-application/src/main/resources/org/gradle/api/internal/plugins/unixStartScript.txt
+#       within the Gradle project.
+#
+#       You can find Gradle at https://github.com/gradle/gradle/.
 #
 ##############################################################################
 
@@ -74,7 +86,7 @@ done
 # shellcheck disable=SC2034
 APP_BASE_NAME=${0##*/}
 # Discard cd standard output in case $CDPATH is set (https://github.com/gradle/gradle/issues/25036)
-APP_HOME=$( cd "${APP_HOME:-./}" > /dev/null && pwd -P ) || exit
+APP_HOME=$( cd -P "${APP_HOME:-./}" > /dev/null && printf '%s\n' "$PWD" ) || exit
 
 # Use the maximum available, or set MAX_FD != -1 to use that value.
 MAX_FD=maximum
@@ -102,7 +114,6 @@ case "$( uname )" in                #(
   NONSTOP* )        nonstop=true ;;
 esac
 
-CLASSPATH=$APP_HOME/gradle/wrapper/gradle-wrapper.jar
 
 
 # Determine the Java command to use to start the JVM.
@@ -160,7 +171,6 @@ fi
 # For Cygwin or MSYS, switch paths to Windows format before running java
 if "$cygwin" || "$msys" ; then
     APP_HOME=$( cygpath --path --mixed "$APP_HOME" )
-    CLASSPATH=$( cygpath --path --mixed "$CLASSPATH" )
 
     JAVACMD=$( cygpath --unix "$JAVACMD" )
 
@@ -169,7 +179,7 @@ if "$cygwin" || "$msys" ; then
         if
             case $arg in                                #(
               -*)   false ;;                            # don't mess with options #(
-              /?*)  t=${arg#)}; t=/${t%%/*}             # looks like a POSIX filepath
+              /?*)  t=${arg#/} t=/${t%%/*}              # looks like a POSIX filepath
                     [ -e "$t" ] ;;                      #(
               *)    false ;;
             esac
@@ -177,11 +187,14 @@ if "$cygwin" || "$msys" ; then
             arg=$( cygpath --path --ignore --mixed "$arg" )
         fi
         # Roll the args list around exactly as many times as the number of
-        # args, so each arg winds up back in the position where it started.
-        # If there are N args and arg i is moved, then its new position is
-        # (i - 1 + N) % N
-        shift                   # out with the old
-        set -- "$@" "$arg"      # in with the new
+        # args, so each arg winds up back in the position where it started, but
+        # possibly modified.
+        #
+        # NB: a `for` loop captures its iteration list before it begins, so
+        # changing the positional parameters here affects neither the number of
+        # iterations, nor the values presented in `arg`.
+        shift                   # remove old arg
+        set -- "$@" "$arg"      # push replacement arg
     done
 fi
 
@@ -189,21 +202,15 @@ fi
 # Add default JVM options here. You can also use JAVA_OPTS and GRADLE_OPTS to pass JVM options to this script.
 DEFAULT_JVM_OPTS='"-Xmx64m" "-Xms64m"'
 
-# Collect all arguments for the java command;
-#   * $DEFAULT_JVM_OPTS, $JAVA_OPTS, and $GRADLE_OPTS can contain fragments of
-#     temporary (i.e. they may reference other temporary variables).
-#   * The user can specify additional temporary using TEMPORARY_OPTIONS, which
-#     will be added to the other temporary before the java command.
-#   * If there are remaining arguments, they will be passed to the java command
-#     as the argument to the "main" class.
-#
-# This script uses the "eval" command extensively, and some of the later
-# eval'd strings may include parameters that reference earlier eval'd variables.
+# Collect all arguments for the java command:
+#   * DEFAULT_JVM_OPTS, JAVA_OPTS, and optsEnvironmentVar are not allowed to contain shell fragments,
+#     and any embedded shellness will be escaped.
+#   * For example: A user cannot expect ${Hostname} to be expanded, as it is an environment variable and will be
+#     treated as '${Hostname}' itself on the command line.
 
 set -- \
         "-Dorg.gradle.appname=$APP_BASE_NAME" \
-        -classpath "$CLASSPATH" \
-        org.gradle.wrapper.GradleWrapperMain \
+        -jar "$APP_HOME/gradle/wrapper/gradle-wrapper.jar" \
         "$@"
 
 # Stop when "xargs" is not available.
@@ -214,11 +221,27 @@ fi
 
 # Use "xargs" to parse quoted args.
 #
-# With -n://services.gradle.org/distributions/gradle-8.11.1-bin.zip, arguments are://services.gradle.org/distributions/gradle-8.11.1-bin.zip fed in://services.gradle.org/distributions/gradle-8.11.1-bin.zip one by://services.gradle.org/distributions/gradle-8.11.1-bin.zip one.://services.gradle.org/distributions/gradle-8.11.1-bin.zip This://services.gradle.org/distributions/gradle-8.11.1-bin.zip loop://services.gradle.org/distributions/gradle-8.11.1-bin.zip is://services.gradle.org/distributions/gradle-8.11.1-bin.zip a://services.gradle.org/distributions/gradle-8.11.1-bin.zip bit://services.gradle.org/distributions/gradle-8.11.1-bin.zip more://services.gradle.org/distributions/gradle-8.11.1-bin.zip careful://services.gradle.org/distributions/gradle-8.11.1-bin.zip than://services.gradle.org/distributions/gradle-8.11.1-bin.zip usual://services.gradle.org/distributions/gradle-8.11.1-bin.zip because://services.gradle.org/distributions/gradle-8.11.1-bin.zip POSIX://services.gradle.org/distributions/gradle-8.11.1-bin.zip sh://services.gradle.org/distributions/gradle-8.11.1-bin.zip does://services.gradle.org/distributions/gradle-8.11.1-bin.zip not://services.gradle.org/distributions/gradle-8.11.1-bin.zip have://services.gradle.org/distributions/gradle-8.11.1-bin.zip array://services.gradle.org/distributions/gradle-8.11.1-bin.zip variables://services.gradle.org/distributions/gradle-8.11.1-bin.zip and://services.gradle.org/distributions/gradle-8.11.1-bin.zip we://services.gradle.org/distributions/gradle-8.11.1-bin.zip need://services.gradle.org/distributions/gradle-8.11.1-bin.zip to://services.gradle.org/distributions/gradle-8.11.1-bin.zip handle://services.gradle.org/distributions/gradle-8.11.1-bin.zip possibly://services.gradle.org/distributions/gradle-8.11.1-bin.zip quoted://services.gradle.org/distributions/gradle-8.11.1-bin.zip arguments://services.gradle.org/distributions/gradle-8.11.1-bin.zip correctly://services.gradle.org/distributions/gradle-8.11.1-bin.zip (even://services.gradle.org/distributions/gradle-8.11.1-bin.zip if://services.gradle.org/distributions/gradle-8.11.1-bin.zip the://services.gradle.org/distributions/gradle-8.11.1-bin.zip actual://services.gradle.org/distributions/gradle-8.11.1-bin.zip value://services.gradle.org/distributions/gradle-8.11.1-bin.zip of://services.gradle.org/distributions/gradle-8.11.1-bin.zip the://services.gradle.org/distributions/gradle-8.11.1-bin.zip argument://services.gradle.org/distributions/gradle-8.11.1-bin.zip may://services.gradle.org/distributions/gradle-8.11.1-bin.zip contain://services.gradle.org/distributions/gradle-8.11.1-bin.zip spaces://services.gradle.org/distributions/gradle-8.11.1-bin.zip or://services.gradle.org/distributions/gradle-8.11.1-bin.zip special://services.gradle.org/distributions/gradle-8.11.1-bin.zip characters://services.gradle.org/distributions/gradle-8.11.1-bin.zip).://services.gradle.org/distributions/gradle-8.11.1-bin.zip The://services.gradle.org/distributions/gradle-8.11.1-bin.zip typical://services.gradle.org/distributions/gradle-8.11.1-bin.zip pattern://services.gradle.org/distributions/gradle-8.11.1-bin.zip is://services.gradle.org/distributions/gradle-8.11.1-bin.zip to://services.gradle.org/distributions/gradle-8.11.1-bin.zip do://services.gradle.org/distributions/gradle-8.11.1-bin.zip "...://services.gradle.org/distributions/gradle-8.11.1-bin.zip |://services.gradle.org/distributions/gradle-8.11.1-bin.zip xargs ...";//services.gradle.org/distributions/gradle-8.11.1-bin.zip here://services.gradle.org/distributions/gradle-8.11.1-bin.zip we://services.gradle.org/distributions/gradle-8.11.1-bin.zip do://services.gradle.org/distributions/gradle-8.11.1-bin.zip "...://services.gradle.org/distributions/gradle-8.11.1-bin.zip |://services.gradle.org/distributions/gradle-8.11.1-bin.zip while://services.gradle.org/distributions/gradle-8.11.1-bin.zip read ...";//services.gradle.org/distributions/gradle-8.11.1-bin.zip If://services.gradle.org/distributions/gradle-8.11.1-bin.zip the://services.gradle.org/distributions/gradle-8.11.1-bin.zip argument://services.gradle.org/distributions/gradle-8.11.1-bin.zip is://services.gradle.org/distributions/gradle-8.11.1-bin.zip quoted://services.gradle.org/distributions/gradle-8.11.1-bin.zip (i.e.://services.gradle.org/distributions/gradle-8.11.1-bin.zip "my://services.gradle.org/distributions/gradle-8.11.1-bin.zip arg"),://services.gradle.org/distributions/gradle-8.11.1-bin.zip we://services.gradle.org/distributions/gradle-8.11.1-bin.zip need://services.gradle.org/distributions/gradle-8.11.1-bin.zip to://services.gradle.org/distributions/gradle-8.11.1-bin.zip unquote://services.gradle.org/distributions/gradle-8.11.1-bin.zip it.://services.gradle.org/distributions/gradle-8.11.1-bin.zip We://services.gradle.org/distributions/gradle-8.11.1-bin.zip do://services.gradle.org/distributions/gradle-8.11.1-bin.zip this://services.gradle.org/distributions/gradle-8.11.1-bin.zip by://services.gradle.org/distributions/gradle-8.11.1-bin.zip prepending://services.gradle.org/distributions/gradle-8.11.1-bin.zip an://services.gradle.org/distributions/gradle-8.11.1-bin.zip empty://services.gradle.org/distributions/gradle-8.11.1-bin.zip string://services.gradle.org/distributions/gradle-8.11.1-bin.zip before://services.gradle.org/distributions/gradle-8.11.1-bin.zip the://services.gradle.org/distributions/gradle-8.11.1-bin.zip character://services.gradle.org/distributions/gradle-8.11.1-bin.zip to://services.gradle.org/distributions/gradle-8.11.1-bin.zip be://services.gradle.org/distributions/gradle-8.11.1-bin.zip escaped://services.gradle.org/distributions/gradle-8.11.1-bin.zip to://services.gradle.org/distributions/gradle-8.11.1-bin.zip make://services.gradle.org/distributions/gradle-8.11.1-bin.zip xargs://services.gradle.org/distributions/gradle-8.11.1-bin.zip treat://services.gradle.org/distributions/gradle-8.11.1-bin.zip them://services.gradle.org/distributions/gradle-8.11.1-bin.zip as://services.gradle.org/distributions/gradle-8.11.1-bin.zip ordinary://services.gradle.org/distributions/gradle-8.11.1-bin.zip strings.://services.gradle.org/distributions/gradle-8.11.1-bin.zip We://services.gradle.org/distributions/gradle-8.11.1-bin.zip then://services.gradle.org/distributions/gradle-8.11.1-bin.zip append://services.gradle.org/distributions/gradle-8.11.1-bin.zip them://services.gradle.org/distributions/gradle-8.11.1-bin.zip to://services.gradle.org/distributions/gradle-8.11.1-bin.zip the://services.gradle.org/distributions/gradle-8.11.1-bin.zip argument://services.gradle.org/distributions/gradle-8.11.1-bin.zip list.
+# With -n1 it outputs one arg per line, with the quotes and backslashes removed.
+#
+# In Bash we could simply go:
+#
+#   readarray ARGS < <( xargs -n1 <<<"$var" ) &&
+#   set -- "${ARGS[@]}" "$@"
+#
+# but POSIX shell has neither arrays nor command substitution, so instead we
+# post-process each arg (as a line of input to sed) to backslash-escape any
+# character that might be a shell metacharacter, then use eval to reverse
+# that process (while maintaining the separation between arguments), and wrap
+# the whole thing up as a single "set" statement.
+#
+# This will of course break if any of these variables contains a newline or
+# an unmatched quote.
+#
+
 eval "set -- $(
         printf '%s\n' "$DEFAULT_JVM_OPTS $JAVA_OPTS $GRADLE_OPTS" |
         xargs -n1 |
-        sed ' s~([^-])~ \1~g; s/^-/\u&/' |
+        sed ' s~[^-[:alnum:]+,./:=@_]~\\&~g; ' |
         tr '\n' ' '
     )" '"$@"'
 

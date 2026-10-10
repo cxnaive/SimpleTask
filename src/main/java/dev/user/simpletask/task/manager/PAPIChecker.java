@@ -75,11 +75,13 @@ public class PAPIChecker {
      */
     private void checkAllOnlinePlayers() {
         for (Player player : Bukkit.getOnlinePlayers()) {
-            try {
-                checkPlayerTasks(player);
-            } catch (Exception e) {
-                plugin.getLogger().warning("Error checking PAPI tasks for player " + player.getName() + ": " + e.getMessage());
-            }
+            player.getScheduler().execute(plugin, () -> {
+                try {
+                    checkPlayerTasks(player);
+                } catch (Exception e) {
+                    plugin.getLogger().warning("Error checking PAPI tasks for player " + player.getName() + ": " + e.getMessage());
+                }
+            }, null, 1L);
         }
     }
 
@@ -134,10 +136,8 @@ public class PAPIChecker {
             if (task.tryMarkCompleted()) {
                 // 持久化完成状态到数据库
                 persistCompletion(player, task);
-                // 在主线程处理完成逻辑
-                plugin.getServer().getGlobalRegionScheduler().execute(plugin, () -> {
-                    onPAPITaskComplete(player, task);
-                });
+                // 已在玩家所属线程，可直接处理完成通知。
+                onPAPITaskComplete(player, task);
             }
         } else {
             // 未完成，持久化进度更新

@@ -1,15 +1,15 @@
 plugins {
     java
     `java-library`
-    id("com.gradleup.shadow") version "8.3.5"
+    id("com.gradleup.shadow") version "9.3.1"
 }
 
 group = "dev.user"
-version = "2.0.0"
+version = "2.0.1"
 
 dependencies {
     // Folia API
-    compileOnly("dev.folia:folia-api:1.21.11-R0.1-SNAPSHOT")
+    compileOnly("dev.folia:folia-api:26.2.build.7-beta")
 
     // XConomy API (软依赖)
     compileOnly("com.github.YiC200333:XConomyAPI:2.25.1")
@@ -19,16 +19,19 @@ dependencies {
     compileOnly("net.momirealms:craft-engine-bukkit:26.7")
 
     // NBT API
-    compileOnly("de.tr7zw:item-nbt-api-plugin:2.15.5")
+    compileOnly("de.tr7zw:item-nbt-api-plugin:2.16.1")
 
     // PlaceholderAPI (软依赖)
-    compileOnly("me.clip:placeholderapi:2.11.6")
+    compileOnly("me.clip:placeholderapi:2.12.3")
 
     // Database & JSON (由服务器通过 plugin.yml libraries 加载)
     compileOnly("com.zaxxer:HikariCP:6.2.1")
     compileOnly("com.h2database:h2:2.3.232")
     compileOnly("com.mysql:mysql-connector-j:9.2.0")
     compileOnly("com.google.code.gson:gson:2.12.1")
+
+    testImplementation("org.junit.jupiter:junit-jupiter:5.11.4")
+    testRuntimeOnly("org.junit.platform:junit-platform-launcher:1.11.4")
 }
 
 repositories {
@@ -42,8 +45,29 @@ repositories {
 
 java {
     toolchain {
-        languageVersion = JavaLanguageVersion.of(21)
+        languageVersion = JavaLanguageVersion.of(25)
     }
+}
+
+sourceSets.test {
+    compileClasspath += sourceSets.main.get().compileClasspath
+    runtimeClasspath += sourceSets.main.get().compileClasspath
+}
+
+val validationProbe = sourceSets.create("validationProbe") {
+    java.srcDir("validation/folia/probe")
+    compileClasspath += sourceSets.main.get().output + sourceSets.main.get().compileClasspath
+}
+
+tasks.register<Jar>("validationProbeJar") {
+    dependsOn(tasks.named(validationProbe.classesTaskName))
+    archiveFileName.set("SimpleTaskValidation.jar")
+    from(validationProbe.output)
+    from("validation/folia/probe-plugin.yml") { rename { "plugin.yml" } }
+}
+
+tasks.test {
+    useJUnitPlatform()
 }
 
 tasks {

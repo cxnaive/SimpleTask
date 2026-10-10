@@ -4,7 +4,7 @@
 
 ## 功能特性
 
-- **10种任务类型**: 发言(CHAT)、合成(CRAFT)、钓鱼(FISH)、消耗(CONSUME)、挖掘(BREAK)、收获(HARVEST)、提交(SUBMIT)、击杀(KILL)、繁殖(BREED)、命令(COMMAND)
+- **11种任务类型**: 发言(CHAT)、合成(CRAFT)、钓鱼(FISH)、消耗(CONSUME)、挖掘(BREAK)、收获(HARVEST)、提交(SUBMIT)、击杀(KILL)、繁殖(BREED)、命令(COMMAND)、占位符条件(PAPI)
 - **任务分类系统**: 支持 daily/weekly/monthly/limited/permanent 五种任务类别
 - **6种过期策略**: 每日、每周、每月、相对时间、固定时间段、永久
 - **可配置自动领取**: 任务完成后自动发放奖励
@@ -18,10 +18,14 @@
 
 ## 环境要求
 
-- Java 21+
-- Folia 或 Paper 1.21+
+- Java 25+
+- Folia 或 Paper 26.2（编译 API：`dev.folia:folia-api:26.2.build.7-beta`）
+- NBTAPI 2.16.1+ - 用于物品组件与 NBT 匹配，硬依赖
 - (可选) XConomy - 用于经济奖励
 - (可选) CraftEngine - 用于自定义物品支持
+- (可选) PlaceholderAPI 2.12.3 - 用于占位符条件任务
+
+26.2 验证环境、功能覆盖和复现方法见 [兼容性报告](validation/folia/RESULTS.md)。
 
 ## 安装方法
 
@@ -29,7 +33,7 @@
 2. 将 JAR 文件放入服务器的 `plugins/` 文件夹
 3. 启动服务器生成默认配置文件
 4. 编辑 `plugins/SimpleTask/config.yml` 和 `plugins/SimpleTask/tasks.yml`
-5. 重启服务器或使用 `/taskadmin reload` 重载配置
+5. 使用 `/taskadmin reloadconfig` 重载配置，再使用 `/taskadmin import all` 导入任务模板
 
 ## 从源码构建
 
@@ -37,7 +41,7 @@
 ./gradlew shadowJar
 ```
 
-构建后的 JAR 文件位于 `build/libs/SimpleTask-1.0.3.jar`。
+构建后的 JAR 文件位于 `build/libs/SimpleTask-2.0.1.jar`。
 
 ## 任务分类系统
 
@@ -211,6 +215,7 @@ fish_salmon:
 | KILL | 击杀生物 | minecraft:zombie |
 | BREED | 繁殖动物 | minecraft:cow |
 | COMMAND | 执行命令 | "spawn" (前缀匹配) |
+| PAPI | 占位符表达式满足条件 | "%player_level% >= 100" |
 
 ### 多物品匹配
 
@@ -324,6 +329,13 @@ mine_diamonds:
 - 使用 `/taskadmin reloadfromdb` 可以从数据库重新加载模板到内存（用于多服同步场景）
 
 ## 更新日志
+
+### 2.0.1
+- 升级至 Minecraft 26.2 API、Java 25、Gradle 9.3.1、NBTAPI 2.16.1 和 PlaceholderAPI 2.12.3
+- 修复 Folia 玩家线程调用：管理员 GUI、提交后的 GUI 更新、PAPI 轮询
+- 提交任务遵守分类的自动领奖设置
+- 修复管理员分配/刷新任务后的缓存更新，以及刷新失败后的事务回滚
+- 经济和 PAPI 集成仅在依赖插件成功启用时激活
 
 ### 1.0.4
 - 新增 COMMAND 任务类型（执行命令），支持前缀匹配多段命令

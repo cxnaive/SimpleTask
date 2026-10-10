@@ -123,7 +123,7 @@ public record PAPIExpression(String placeholder, String operator, String value) 
      * 检查 PlaceholderAPI 是否可用
      */
     public static boolean isPAPIAvailable() {
-        return Bukkit.getPluginManager().getPlugin("PlaceholderAPI") != null;
+        return Bukkit.getPluginManager().isPluginEnabled("PlaceholderAPI");
     }
 
     /**
